@@ -25,7 +25,7 @@
   --color-bg: #181818;
 
   /* Tile sizing — constrained by both width and height so board always fits viewport */
-  --tile-size:      min(clamp(30px, 4.6vw, 50px), calc((100svh - 250px) / 13));
+  --tile-size:      min(clamp(30px, 4.6vw, 50px), calc((100dvh - 250px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 13));
   --tile-thickness: 4px;
   --tile-radius:    3px;
   --cell-gap:       3px;
@@ -44,7 +44,7 @@ body {
   font-family: var(--font-sans);
   background-color: var(--color-bg);
   color: #FFFFFF;
-  height: 100svh;
+  height: 100dvh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

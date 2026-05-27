@@ -1,5 +1,5 @@
 import './Cell.css';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
 import { createTileDragImage } from '../../utils/dragImage';
@@ -20,6 +20,7 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
   const { tile, bonus, bonusUsed } = state;
   const { placeTile, moveTile, recallTile, isCurrentTurnTile, currentPlayer } = useGameStore();
   const [isDraggingOut, setIsDraggingOut] = useState(false);
+  const dragTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isThisTurn = isCurrentTurnTile(col, row);
   const showBonus = bonus && !tile && !bonusUsed;
   const showPip   = bonus && bonusUsed && tile;
@@ -50,7 +51,7 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
 
   function handleTileDragStart(e: React.DragEvent) {
     if (!isThisTurn) { e.preventDefault(); return; }
-    setTimeout(() => setIsDraggingOut(true), 0);
+    dragTimer.current = setTimeout(() => setIsDraggingOut(true), 0);
     const data: DragData = { type: 'board', col, row };
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
@@ -64,6 +65,7 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
   }
 
   function handleTileDragEnd() {
+    if (dragTimer.current !== null) clearTimeout(dragTimer.current);
     setIsDraggingOut(false);
   }
 

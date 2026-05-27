@@ -1,5 +1,5 @@
 import './Rack.css';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
 import { createTileDragImage } from '../../utils/dragImage';
@@ -9,9 +9,10 @@ export function Rack() {
   const { getCurrentRack, currentPlayer, recallTile, recallAllTiles, moveRackTileToSlot, shuffleRack } = useGameStore();
   const slots = getCurrentRack();
   const [draggingSlot, setDraggingSlot] = useState<number | null>(null);
+  const dragTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleTileDragStart(e: React.DragEvent, tileId: string, slotIndex: number, letter: string) {
-    setTimeout(() => setDraggingSlot(slotIndex), 0);
+    dragTimer.current = setTimeout(() => setDraggingSlot(slotIndex), 0);
     const data: DragData = { type: 'rack', tileId, slotIndex };
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
@@ -21,6 +22,11 @@ export function Rack() {
     document.body.appendChild(ghost);
     e.dataTransfer.setDragImage(ghost, 25, 25);
     setTimeout(() => ghost.remove(), 0);
+  }
+
+  function handleTileDragEnd() {
+    if (dragTimer.current !== null) clearTimeout(dragTimer.current);
+    setDraggingSlot(null);
   }
 
   function handleSlotDragOver(e: React.DragEvent) {
@@ -61,7 +67,7 @@ export function Rack() {
                 draggable
                 isDragging={draggingSlot === i}
                 onDragStart={e => handleTileDragStart(e, slot.id, i, slot.isWild ? '★' : slot.letter)}
-                onDragEnd={() => setDraggingSlot(null)}
+                onDragEnd={handleTileDragEnd}
               />
             )}
           </div>

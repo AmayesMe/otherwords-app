@@ -33,6 +33,7 @@ interface GameStore {
   recallAllTiles: () => void;
   swapRackSlots: (fromIndex: number, toIndex: number) => void;
   moveRackTileToSlot: (tileId: string, fromIndex: number, toIndex: number) => void;
+  shuffleRack: () => void;
 
   // Helpers
   getCurrentRack: () => RackSlot[];
@@ -197,5 +198,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Swap with target (whether occupied or empty)
     [newRack[fromIndex], newRack[toIndex]] = [newRack[toIndex], newRack[fromIndex]];
     set(setCurrentRack(state, newRack));
+  },
+
+  shuffleRack() {
+    const state = get();
+    const rack = [...getCurrentRackSlots(state)];
+    // Only shuffle the non-null slots so placed-tile recall indices stay valid
+    const filledIndices = rack.map((slot, i) => slot !== null ? i : -1).filter(i => i !== -1);
+    const tiles = filledIndices.map(i => rack[i]);
+    for (let i = tiles.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+    }
+    filledIndices.forEach((slotIndex, i) => { rack[slotIndex] = tiles[i]; });
+    set(setCurrentRack(state, rack));
   },
 }));

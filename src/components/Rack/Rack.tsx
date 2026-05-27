@@ -6,12 +6,12 @@ import { createTileDragImage } from '../../utils/dragImage';
 import type { DragData } from '../../store/gameStore';
 
 export function Rack() {
-  const { getCurrentRack, currentPlayer, recallTile, recallAllTiles, moveRackTileToSlot } = useGameStore();
+  const { getCurrentRack, currentPlayer, recallTile, recallAllTiles, moveRackTileToSlot, shuffleRack } = useGameStore();
   const slots = getCurrentRack();
   const [draggingSlot, setDraggingSlot] = useState<number | null>(null);
 
   function handleTileDragStart(e: React.DragEvent, tileId: string, slotIndex: number, letter: string) {
-    setDraggingSlot(slotIndex);
+    setTimeout(() => setDraggingSlot(slotIndex), 0);
     const data: DragData = { type: 'rack', tileId, slotIndex };
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
@@ -45,6 +45,7 @@ export function Rack() {
 
   return (
     <div className="rack-wrapper">
+      <div className="rack-row">
       <div className="rack">
         {slots.map((slot, i) => (
           <div
@@ -65,6 +66,8 @@ export function Rack() {
             )}
           </div>
         ))}
+      </div>
+      <button className="btn btn-icon" onClick={shuffleRack} title="Shuffle tiles">⇄</button>
       </div>
       <div className="turn-controls">
         <button className="btn btn-secondary" onClick={recallAllTiles}>Reset Turn</button>

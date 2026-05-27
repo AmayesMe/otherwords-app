@@ -50,7 +50,7 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
 
   function handleTileDragStart(e: React.DragEvent) {
     if (!isThisTurn) { e.preventDefault(); return; }
-    setIsDraggingOut(true);
+    setTimeout(() => setIsDraggingOut(true), 0);
     const data: DragData = { type: 'board', col, row };
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';

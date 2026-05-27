@@ -20,8 +20,40 @@
 
 .score-block {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
+}
+
+.score-num-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Projected-score chips — styled as inverted tile faces so they read
+   as "what would flip" rather than just a duplicate of the main score. */
+.score-chip {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 3px 9px;
+  border-radius: 4px;
+  line-height: 1.4;
+  transition: opacity 150ms ease;
+}
+
+/* P1 chip: off-white box, dark text (mirrors a P2 tile) */
+.score-chip-p1 {
+  background: var(--color-player2);
+  color: var(--color-player2-letter);
+}
+
+/* P2 chip: dark box, white text (mirrors a P1 tile) */
+.score-chip-p2 {
+  background: var(--color-player1);
+  color: var(--color-player1-letter);
+  outline: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .score-left  { flex-direction: row; }

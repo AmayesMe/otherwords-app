@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { createEmptyBoard, countScore } from '../game/boardUtils';
 import { validatePlacement } from '../game/turnUtils';
+import { extractNewWords, findConfiscatedCells } from '../game/wordUtils';
+import { loadDictionary, isValidWord } from '../game/dictionary';
 import { TILE_DISTRIBUTION, BLANK_TILE_COUNT, STARTING_RACK_SIZE } from '../game/config';
 import type { BoardState, Player, RackTile, TileData } from '../game/types';
 
@@ -79,14 +81,24 @@ function dealTiles(bag: string[], count: number): { rack: RackSlot[]; bag: strin
 }
 
 function refillRack(rack: RackSlot[], bag: string[]): { rack: RackSlot[]; bag: string[] } {
-  const newRack = [...rack];
+  // Always normalise back to exactly STARTING_RACK_SIZE slots.
+  // Collect whatever tiles the player still holds (regardless of rack length,
+  // which may be inflated from a previous bonus draw), then draw just enough
+  // to reach 7. Bonus tiles are appended on top of this in endTurn.
+  const held = rack.filter((s): s is RackTile => s !== null);
   const newBag = [...bag];
-  for (let i = 0; i < newRack.length; i++) {
-    if (newRack[i] === null && newBag.length > 0) {
-      const letter = newBag.pop()!;
-      newRack[i] = { id: makeTileId(), letter, isWild: letter === '*' };
-    }
+  const newRack: RackSlot[] = [...held];
+
+  while (newRack.length < STARTING_RACK_SIZE && newBag.length > 0) {
+    const letter = newBag.pop()!;
+    newRack.push({ id: makeTileId(), letter, isWild: letter === '*' });
   }
+
+  // Pad with null slots if the bag ran dry
+  while (newRack.length < STARTING_RACK_SIZE) {
+    newRack.push(null);
+  }
+
   return { rack: newRack, bag: newBag };
 }
 
@@ -262,30 +274,66 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set(setCurrentRack(state, rack));
   },
 
-  endTurn() {
+  async endTurn() {
     const state = get();
     const { board, currentTurnPlacements, currentPlayer, tileBag, turnCount } = state;
 
-    // Validate
+    // Validate placement geometry
     const result = validatePlacement(board, currentTurnPlacements, turnCount === 0);
     if (!result.valid) {
       set({ turnError: result.error ?? 'Invalid placement.' });
       return;
     }
 
-    // Commit: mark bonus spaces as used on placed tiles
+    // Validate words against dictionary (ensures the word set is loaded)
+    await loadDictionary();
+    const newWords = extractNewWords(board, currentTurnPlacements);
+    for (const word of newWords) {
+      // Skip validation for words containing unassigned wild tiles (letter not yet chosen)
+      if (word.containsWild) continue;
+      if (!isValidWord(word.letters)) {
+        set({ turnError: `Not a word: ${word.letters.toUpperCase()}` });
+        return;
+      }
+    }
+
+    // Commit: mark bonus spaces as used and tally extra tiles earned
     const newBoard: BoardState = board.map(r => r.map(c => ({ ...c })));
+    let bonusTilesEarned = 0;
     for (const key of Object.keys(currentTurnPlacements)) {
       const [col, row] = key.split(',').map(Number);
       const cell = newBoard[row][col];
       if (cell.bonus && !cell.bonusUsed) {
         newBoard[row][col] = { ...cell, bonusUsed: true };
+        bonusTilesEarned += cell.bonus;
       }
     }
 
-    // Refill current player's rack from bag
+    // Confiscation: if a word was EXTENDED this turn (letters added to either
+    // end, making it longer), all tiles in that word flip to the current
+    // player's color — including any opponent tiles already in the word.
+    // Crossing through a word or replacing a letter in-place does NOT confiscate.
+    const confiscated = findConfiscatedCells(newBoard, currentTurnPlacements, newWords);
+    for (const { col, row } of confiscated) {
+      const cell = newBoard[row][col];
+      if (cell.tile && cell.tile.owner !== currentPlayer) {
+        newBoard[row][col] = { ...cell, tile: { ...cell.tile, owner: currentPlayer } };
+      }
+    }
+
+    // Refill current player's rack back to standard size, then draw bonus tiles
     const currentRack = getCurrentRackSlots(state);
     const refilled = refillRack(currentRack, tileBag);
+
+    // Append bonus tiles to the end of the rack (rack grows temporarily)
+    let finalRack: RackSlot[] = [...refilled.rack];
+    let finalBag = [...refilled.bag];
+    for (let i = 0; i < bonusTilesEarned; i++) {
+      if (finalBag.length > 0) {
+        const letter = finalBag.pop()!;
+        finalRack.push({ id: makeTileId(), letter, isWild: letter === '*' });
+      }
+    }
 
     // Update scores from committed board
     const scores = countScore(newBoard);
@@ -293,14 +341,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Switch player
     const nextPlayer: Player = currentPlayer === 'player1' ? 'player2' : 'player1';
     const rackUpdate = currentPlayer === 'player1'
-      ? { player1Rack: refilled.rack }
-      : { player2Rack: refilled.rack };
+      ? { player1Rack: finalRack }
+      : { player2Rack: finalRack };
 
     set({
       board: newBoard,
       currentTurnPlacements: {},
       currentPlayer: nextPlayer,
-      tileBag: refilled.bag,
+      tileBag: finalBag,
       turnCount: turnCount + 1,
       turnError: null,
       player1Score: scores.player1,

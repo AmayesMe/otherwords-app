@@ -19,16 +19,14 @@ export function isCenterCell(col: number, row: number): boolean {
   return col === CENTER_COL && row === CENTER_ROW;
 }
 
+// Score = pure tile count. Bonus spaces give extra tiles to draw, not score multipliers.
 export function countScore(board: BoardState): { player1: number; player2: number } {
   let player1 = 0;
   let player2 = 0;
   for (const row of board) {
     for (const cell of row) {
-      if (!cell.tile) continue;
-      // Bonus adds to territory value when it's been claimed (tile committed on bonus space)
-      const value = 1 + (cell.bonusUsed && cell.bonus ? cell.bonus : 0);
-      if (cell.tile.owner === 'player1') player1 += value;
-      else player2 += value;
+      if (cell.tile?.owner === 'player1') player1++;
+      else if (cell.tile?.owner === 'player2') player2++;
     }
   }
   return { player1, player2 };

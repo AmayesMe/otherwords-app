@@ -5,10 +5,9 @@ import type { BoardState } from '../../game/types';
 
 interface BoardProps {
   board: BoardState;
-  currentTurnCells?: Set<string>;
 }
 
-export function Board({ board, currentTurnCells = new Set() }: BoardProps) {
+export function Board({ board }: BoardProps) {
   return (
     <div className="board">
       {board.map((row, rowIndex) =>
@@ -19,7 +18,6 @@ export function Board({ board, currentTurnCells = new Set() }: BoardProps) {
             col={colIndex}
             row={rowIndex}
             isCenter={isCenterCell(colIndex, rowIndex)}
-            isCurrentTurnTile={currentTurnCells.has(`${colIndex},${rowIndex}`)}
           />
         ))
       )}

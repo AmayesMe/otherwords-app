@@ -4,14 +4,18 @@
   perspective: 800px;
   position: relative;
   flex-shrink: 0;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
-  transition: filter 150ms ease;
+  /* box-shadow instead of filter:drop-shadow — filter creates a stacking context
+     that iOS Safari uses to flatten transform-style:preserve-3d children, making
+     the 3D edges invisible and leaving P1 black tiles invisible on dark bg. */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  border-radius: var(--tile-radius);
+  transition: box-shadow 150ms ease;
   /* Prevent the browser hijacking touches as a scroll gesture during drag */
   touch-action: none;
 }
 
 .tile-container.tile-new {
-  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.5));
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .tile-container.tile-dragging {
@@ -24,6 +28,7 @@
   height: 100%;
   position: relative;
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   transition: transform 400ms ease-in-out;
   border-radius: var(--tile-radius);
 }

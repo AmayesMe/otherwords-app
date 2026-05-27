@@ -1,0 +1,101 @@
+.tile-container {
+  width: var(--tile-size);
+  height: var(--tile-size);
+  perspective: 800px;
+  position: relative;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+  transition: filter 150ms ease;
+}
+
+.tile-container.tile-new {
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.5));
+}
+
+.tile-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 400ms ease-in-out;
+  border-radius: var(--tile-radius);
+  cursor: grab;
+}
+
+.tile-inner.tile-flipping {
+  transform: rotateY(180deg);
+}
+
+.tile-new .tile-inner {
+  transform: translateY(-2px);
+}
+
+/* Faces */
+.tile-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: var(--tile-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--tile-size) * 0.54);
+  font-weight: 800;
+  font-family: var(--font-sans);
+  letter-spacing: -0.02em;
+  user-select: none;
+}
+
+.tile-back {
+  transform: rotateY(180deg);
+}
+
+.tile-p1 { background-color: var(--color-player1); color: var(--color-player1-letter); }
+.tile-p2 { background-color: var(--color-player2); color: var(--color-player2-letter); }
+
+/* Edges — give the tile physical depth */
+.tile-edge {
+  position: absolute;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.edge-p1 { background-color: #000; }
+.edge-p2 { background-color: #C8C8C8; }
+
+.tile-edge-top {
+  width: 100%;
+  height: var(--tile-thickness);
+  top: 0; left: 0;
+  transform-origin: top center;
+  transform: rotateX(90deg) translateZ(calc(var(--tile-thickness) * -0.5));
+}
+
+.tile-edge-bottom {
+  width: 100%;
+  height: var(--tile-thickness);
+  bottom: 0; left: 0;
+  transform-origin: bottom center;
+  transform: rotateX(-90deg) translateZ(calc(var(--tile-thickness) * -0.5));
+}
+
+.tile-edge-left {
+  width: var(--tile-thickness);
+  height: 100%;
+  top: 0; left: 0;
+  transform-origin: left center;
+  transform: rotateY(-90deg) translateZ(calc(var(--tile-thickness) * -0.5));
+}
+
+.tile-edge-right {
+  width: var(--tile-thickness);
+  height: 100%;
+  top: 0; right: 0;
+  transform-origin: right center;
+  transform: rotateY(90deg) translateZ(calc(var(--tile-thickness) * -0.5));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile-inner { transition: none; }
+}

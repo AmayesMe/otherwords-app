@@ -32,6 +32,7 @@ interface GameStore {
   tileBag: string[];
   turnCount: number;         // 0 = first turn of game not yet played
   turnError: string | null;
+  pendingWildAssignment: { col: number; row: number } | null;
 
   // Actions
   placeTile: (tileId: string, slotIndex: number, col: number, row: number) => void;
@@ -42,6 +43,8 @@ interface GameStore {
   moveRackTileToSlot: (tileId: string, fromIndex: number, toIndex: number) => void;
   shuffleRack: () => void;
   endTurn: () => void;
+  assignWildLetter: (letter: string) => void;
+  cancelWildAssignment: () => void;
 
   // Helpers
   getCurrentRack: () => RackSlot[];
@@ -131,6 +134,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   tileBag: p2Deal.bag,
   turnCount: 0,
   turnError: null,
+  pendingWildAssignment: null,
 
   getCurrentRack: () => getCurrentRackSlots(get()),
   isCurrentTurnTile: (col, row) => `${col},${row}` in get().currentTurnPlacements,
@@ -173,7 +177,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
     };
 
-    set({ board: newBoard, currentTurnPlacements: newPlacements, turnError: null, ...setCurrentRack(state, newRack) });
+    set({
+      board: newBoard,
+      currentTurnPlacements: newPlacements,
+      turnError: null,
+      pendingWildAssignment: rackTile.isWild ? { col, row } : null,
+      ...setCurrentRack(state, newRack),
+    });
   },
 
   moveTile(fromCol, fromRow, toCol, toRow) {
@@ -228,7 +238,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newPlacements = { ...state.currentTurnPlacements };
     delete newPlacements[key];
 
-    set({ board: newBoard, currentTurnPlacements: newPlacements, turnError: null, ...setCurrentRack(state, newRack) });
+    set({ board: newBoard, currentTurnPlacements: newPlacements, pendingWildAssignment: null, turnError: null, ...setCurrentRack(state, newRack) });
   },
 
   recallAllTiles() {
@@ -242,7 +252,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newRack[placement.rackSlotIndex] = { id: placement.rackTileId, letter: placement.letter, isWild: placement.isWild };
     }
 
-    set({ board: newBoard, currentTurnPlacements: {}, turnError: null, ...setCurrentRack(state, newRack) });
+    set({ board: newBoard, currentTurnPlacements: {}, pendingWildAssignment: null, turnError: null, ...setCurrentRack(state, newRack) });
   },
 
   swapRackSlots(fromIndex, toIndex) {
@@ -272,6 +282,36 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     filledIndices.forEach((slotIndex, i) => { rack[slotIndex] = tiles[i]; });
     set(setCurrentRack(state, rack));
+  },
+
+  assignWildLetter(letter: string) {
+    const state = get();
+    const { pendingWildAssignment, board } = state;
+    if (!pendingWildAssignment) return;
+    const { col, row } = pendingWildAssignment;
+    const cell = board[row][col];
+    if (!cell.tile) return;
+    const newBoard: BoardState = board.map(r => r.map(c => ({ ...c })));
+    newBoard[row][col] = { ...cell, tile: { ...cell.tile, wildLetter: letter } };
+    set({ board: newBoard, pendingWildAssignment: null });
+  },
+
+  cancelWildAssignment() {
+    const state = get();
+    const { pendingWildAssignment, currentTurnPlacements, board } = state;
+    if (!pendingWildAssignment) return;
+    const { col, row } = pendingWildAssignment;
+    const key = `${col},${row}`;
+    const placement = currentTurnPlacements[key];
+    if (!placement) { set({ pendingWildAssignment: null }); return; }
+    const cell = board[row][col];
+    const newBoard: BoardState = board.map(r => r.map(c => ({ ...c })));
+    newBoard[row][col] = { ...cell, tile: placement.replacedTile };
+    const newRack = [...getCurrentRackSlots(state)];
+    newRack[placement.rackSlotIndex] = { id: placement.rackTileId, letter: placement.letter, isWild: placement.isWild };
+    const newPlacements = { ...currentTurnPlacements };
+    delete newPlacements[key];
+    set({ board: newBoard, currentTurnPlacements: newPlacements, pendingWildAssignment: null, turnError: null, ...setCurrentRack(state, newRack) });
   },
 
   async endTurn() {

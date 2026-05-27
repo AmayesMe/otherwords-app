@@ -37,8 +37,16 @@ export function extractNewWords(
       const cell = col < BOARD_WIDTH ? board[row][col] : null;
       if (cell?.tile) {
         if (runStart === -1) runStart = col;
-        letters += cell.tile.isWild ? '?' : cell.tile.letter.toLowerCase();
-        if (cell.tile.isWild) containsWild = true;
+        if (cell.tile.isWild) {
+          if (cell.tile.wildLetter) {
+            letters += cell.tile.wildLetter.toLowerCase();
+          } else {
+            letters += '?';
+            containsWild = true;
+          }
+        } else {
+          letters += cell.tile.letter.toLowerCase();
+        }
         if (placementSet.has(`${col},${row}`)) hasNewTile = true;
         cells.push({ col, row });
       } else {
@@ -62,8 +70,16 @@ export function extractNewWords(
       const cell = row < BOARD_HEIGHT ? board[row][col] : null;
       if (cell?.tile) {
         if (runStart === -1) runStart = row;
-        letters += cell.tile.isWild ? '?' : cell.tile.letter.toLowerCase();
-        if (cell.tile.isWild) containsWild = true;
+        if (cell.tile.isWild) {
+          if (cell.tile.wildLetter) {
+            letters += cell.tile.wildLetter.toLowerCase();
+          } else {
+            letters += '?';
+            containsWild = true;
+          }
+        } else {
+          letters += cell.tile.letter.toLowerCase();
+        }
         if (placementSet.has(`${col},${row}`)) hasNewTile = true;
         cells.push({ col, row });
       } else {

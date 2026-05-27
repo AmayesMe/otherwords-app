@@ -22,12 +22,17 @@
   --color-bonus-3: #6B4F18;
 
   /* App chrome */
-  --color-bg: #181818;
+  --color-bg: #2E2E2E;
 
   /* Tile sizing — constrained by both width and height so board always fits viewport.
      Divides by 14: 13 board rows + 1 rack row (both tile-size tall).
      270px covers score bar, buttons, padding, gaps, and safe-area buffer. */
-  --tile-size:      min(clamp(28px, 4.6vw, 50px), calc((100dvh - 270px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 14));
+  /* Divide by 15: 13 board rows + 1 rack row + 1 score-digit row.
+     260px covers labels, projected text, buttons, padding, gaps, and safe-area buffer. */
+  --tile-size:      min(clamp(28px, 4.6vw, 50px), calc((100dvh - 260px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 15));
+  /* Used by the projected-score tiles. Defined here (not on the child) to avoid
+     a CSS custom-property circular reference. */
+  --tile-size-half: calc(var(--tile-size) * 0.5);
   --tile-thickness: 4px;
   --tile-radius:    3px;
   --cell-gap:       3px;

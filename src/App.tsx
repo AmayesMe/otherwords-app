@@ -2,9 +2,63 @@ import './App.css';
 import { useMemo } from 'react';
 import { Board } from './components/Board/Board';
 import { Rack } from './components/Rack/Rack';
+import { LetterPicker } from './components/LetterPicker/LetterPicker';
+import { Tile } from './components/Tile/Tile';
 import { useGameStore } from './store/gameStore';
 import { countScore } from './game/boardUtils';
 import { extractNewWords, findConfiscatedCells } from './game/wordUtils';
+import type { Player } from './game/types';
+
+// Two digits normally; three digits once a player reaches 100.
+function scoreDigits(n: number): string[] {
+  const s = Math.min(Math.max(n, 0), 999);
+  if (s >= 100) {
+    return [String(Math.floor(s / 100)), String(Math.floor((s % 100) / 10)), String(s % 10)];
+  }
+  return [String(Math.floor(s / 10)), String(s % 10)];
+}
+
+interface ScoreGroupProps {
+  score: number;
+  projected: number | null;
+  owner: Player;
+  label: string;
+  labelSide: 'left' | 'right';
+  isActive: boolean;
+}
+
+function ScoreGroup({ score, projected, owner, label, labelSide, isActive }: ScoreGroupProps) {
+  const actualDigits = scoreDigits(score);
+  const projDigits   = scoreDigits(projected ?? 0);
+
+  const nameTag = (
+    <span className={`score-label ${isActive ? 'score-label-active' : ''}`}>{label}</span>
+  );
+
+  // Digit column: actual score on top, projected (half-size) centred beneath.
+  // The projected row is always rendered (visibility toggled) to hold layout height.
+  const digitCol = (
+    <div className="score-digit-col">
+      <div className="score-digits">
+        {actualDigits.map((d, i) => <Tile key={`a${i}`} letter={d} owner={owner} />)}
+      </div>
+      <div
+        className="score-digits score-digits-proj"
+        style={{ visibility: projected !== null ? 'visible' : 'hidden' }}
+      >
+        {projDigits.map((d, i) => <Tile key={`p${i}`} letter={d} owner={owner} />)}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="score-group">
+      {labelSide === 'left' && nameTag}
+      {digitCol}
+      {labelSide === 'right' && nameTag}
+    </div>
+  );
+}
 
 export default function App() {
   const {
@@ -15,14 +69,10 @@ export default function App() {
     currentTurnPlacements,
   } = useGameStore();
 
-  // Projected score: what the board would look like if End Turn were pressed
-  // right now (includes confiscation). Only computed while tiles are placed.
   const projectedScore = useMemo(() => {
     if (Object.keys(currentTurnPlacements).length === 0) return null;
-
     const newWords = extractNewWords(board, currentTurnPlacements);
     const confiscated = findConfiscatedCells(board, currentTurnPlacements, newWords);
-
     const projBoard = board.map(r => r.map(c => ({ ...c })));
     for (const { col, row } of confiscated) {
       const cell = projBoard[row][col];
@@ -30,36 +80,28 @@ export default function App() {
         projBoard[row][col] = { ...cell, tile: { ...cell.tile, owner: currentPlayer } };
       }
     }
-
     return countScore(projBoard);
   }, [board, currentTurnPlacements, currentPlayer]);
 
   return (
     <div className="app">
       <header className="score-bar">
-
-        <div className={`score-block score-left ${currentPlayer === 'player1' ? 'score-active' : ''}`}>
-          <span className="player-label">Player 1</span>
-          <div className="score-num-group">
-            <span className="score-num">{player1Score}</span>
-            {projectedScore !== null && (
-              <span className="score-chip score-chip-p1">{projectedScore.player1}</span>
-            )}
-          </div>
-        </div>
-
-        <span className="score-sep">vs</span>
-
-        <div className={`score-block score-right ${currentPlayer === 'player2' ? 'score-active' : ''}`}>
-          <div className="score-num-group">
-            {projectedScore !== null && (
-              <span className="score-chip score-chip-p2">{projectedScore.player2}</span>
-            )}
-            <span className="score-num">{player2Score}</span>
-          </div>
-          <span className="player-label">Player 2</span>
-        </div>
-
+        <ScoreGroup
+          score={player1Score}
+          projected={projectedScore?.player1 ?? null}
+          owner="player1"
+          label="Player 1"
+          labelSide="left"
+          isActive={currentPlayer === 'player1'}
+        />
+        <ScoreGroup
+          score={player2Score}
+          projected={projectedScore?.player2 ?? null}
+          owner="player2"
+          label="Player 2"
+          labelSide="right"
+          isActive={currentPlayer === 'player2'}
+        />
       </header>
 
       <main className="board-area">
@@ -69,6 +111,8 @@ export default function App() {
       <footer className="rack-area">
         <Rack />
       </footer>
+
+      <LetterPicker />
     </div>
   );
 }

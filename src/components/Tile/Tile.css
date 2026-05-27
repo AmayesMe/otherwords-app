@@ -6,6 +6,8 @@
   flex-shrink: 0;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
   transition: filter 150ms ease;
+  /* Prevent the browser hijacking touches as a scroll gesture during drag */
+  touch-action: none;
 }
 
 .tile-container.tile-new {
@@ -24,7 +26,6 @@
   transform-style: preserve-3d;
   transition: transform 400ms ease-in-out;
   border-radius: var(--tile-radius);
-  cursor: grab;
 }
 
 .tile-inner.tile-flipping {
@@ -58,6 +59,19 @@
 
 .tile-p1 { background-color: var(--color-player1); color: var(--color-player1-letter); }
 .tile-p2 { background-color: var(--color-player2); color: var(--color-player2-letter); }
+
+/* Wild tile indicator dot — centred on the tile face, full opacity */
+.tile-wild-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width:  calc(var(--tile-size) * 0.2);
+  height: calc(var(--tile-size) * 0.2);
+  border-radius: 50%;
+  background: currentColor;
+  pointer-events: none;
+}
 
 /* Edges — give the tile physical depth */
 .tile-edge {

@@ -8,88 +8,75 @@
   gap: var(--space-2);
 }
 
-/* Score bar */
+/* Score bar — both players centred side by side */
 .score-bar {
-  width: 100%;
-  max-width: calc(13 * var(--tile-size) + 12 * var(--cell-gap) + 2 * var(--cell-gap));
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--space-1) 0;
+  justify-content: center;
+  gap: var(--space-3);
+  width: 100%;
 }
 
-.score-block {
+/* One player's score group: [label] [digit-col] or [digit-col] [label] */
+.score-group {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* label top-aligns with the actual-score tile row */
   gap: 10px;
 }
 
-.score-num-group {
+/* Stacks actual score on top of projected score */
+.score-digit-col {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 
-/* Projected-score chips — styled as inverted tile faces so they read
-   as "what would flip" rather than just a duplicate of the main score. */
-.score-chip {
+/* Actual-score digit tiles */
+.score-digits {
+  display: flex;
+  gap: 4px;
+}
+
+/* Projected-score tiles — half the tile size, larger font-to-tile ratio so
+   the digits don't feel like they shrank by half. Override --tile-size locally
+   (safe: references --tile-size-half, not itself). */
+.score-digits-proj {
+  --tile-size:      var(--tile-size-half);
+  --tile-thickness: 2px;
+}
+
+/* Bump font relative to the smaller tile so it reads closer to 65–70% of full */
+.score-digits-proj .tile-face {
+  font-size: calc(var(--tile-size) * 0.72);
+}
+
+/* Player name label */
+.score-label {
   font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  padding: 3px 9px;
-  border-radius: 4px;
-  line-height: 1.4;
-  transition: opacity 150ms ease;
-}
-
-/* P1 chip: off-white box, dark text (mirrors a P2 tile) */
-.score-chip-p1 {
-  background: var(--color-player2);
-  color: var(--color-player2-letter);
-}
-
-/* P2 chip: dark box, white text (mirrors a P1 tile) */
-.score-chip-p2 {
-  background: var(--color-player1);
-  color: var(--color-player1-letter);
-  outline: 1px solid rgba(255, 255, 255, 0.18);
-}
-
-.score-left  { flex-direction: row; }
-.score-right { flex-direction: row-reverse; }
-
-.player-label {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.score-num {
-  font-size: 52px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.03em;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.35);
   transition: color 200ms ease;
+  white-space: nowrap;
+  /* Visually top-align with the tile face, not the 3-D edge */
+  padding-top: 3px;
 }
 
-.score-active .score-num {
-  color: #FFFFFF;
+.score-label-active {
+  color: rgba(255, 255, 255, 0.8);
+  animation: label-pulse 2.4s ease-in-out infinite;
 }
 
-.score-active .player-label {
-  color: rgba(255, 255, 255, 0.75);
+@keyframes label-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
 }
 
-.score-sep {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.2);
+@media (prefers-reduced-motion: reduce) {
+  .score-label-active { animation: none; }
 }
 
 /* Board area */

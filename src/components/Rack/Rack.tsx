@@ -1,74 +1,48 @@
 import './Rack.css';
-import { useRef } from 'react';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
-import { createTileDragImage } from '../../utils/dragImage';
-import type { DragData } from '../../store/gameStore';
+import { pointerDown, pointerMove, pointerUp, pointerCancel } from '../../utils/pointerDrag';
 
 export function Rack() {
-  const { getCurrentRack, currentPlayer, recallTile, recallAllTiles, moveRackTileToSlot, shuffleRack, endTurn, turnError } = useGameStore();
+  const { getCurrentRack, currentPlayer, recallAllTiles, moveRackTileToSlot, placeTile, shuffleRack, endTurn, turnError } = useGameStore();
   const slots = getCurrentRack();
-  const dragRef = useRef<{ el: HTMLElement; timer: ReturnType<typeof setTimeout> } | null>(null);
-
-  function handleTileDragStart(e: React.DragEvent, tileId: string, slotIndex: number, letter: string) {
-    const el = e.currentTarget as HTMLElement;
-    const timer = setTimeout(() => el.classList.add('tile-dragging'), 0);
-    dragRef.current = { el, timer };
-
-    const data: DragData = { type: 'rack', tileId, slotIndex };
-    e.dataTransfer.setData('text/plain', JSON.stringify(data));
-    e.dataTransfer.effectAllowed = 'move';
-
-    const ghost = createTileDragImage(letter, currentPlayer);
-    document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, 25, 25);
-    setTimeout(() => ghost.remove(), 0);
-  }
-
-  function handleTileDragEnd() {
-    if (dragRef.current) {
-      clearTimeout(dragRef.current.timer);
-      dragRef.current.el.classList.remove('tile-dragging');
-      dragRef.current = null;
-    }
-  }
-
-  function handleSlotDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }
-
-  function handleSlotDrop(e: React.DragEvent, toIndex: number) {
-    e.preventDefault();
-    const raw = e.dataTransfer.getData('text/plain');
-    if (!raw) return;
-    const data = JSON.parse(raw) as DragData;
-
-    if (data.type === 'rack') {
-      moveRackTileToSlot(data.tileId, data.slotIndex, toIndex);
-    } else if (data.type === 'board') {
-      recallTile(data.col, data.row);
-    }
-  }
 
   return (
     <div className="rack-wrapper">
       <div className="rack-row">
-        <div className="rack">
+        {/* data-drop-rack-area lets board tiles detect a drop on the rack (→ recall) */}
+        <div className="rack" data-drop-rack-area>
           {slots.map((slot, i) => (
             <div
               key={i}
               className="rack-slot"
-              onDragOver={handleSlotDragOver}
-              onDrop={e => handleSlotDrop(e, i)}
+              data-drop-rack={i}
             >
               {slot && (
                 <Tile
-                  letter={slot.isWild ? '★' : slot.letter}
+                  letter={slot.isWild ? '' : slot.letter}
                   owner={currentPlayer}
-                  draggable
-                  onDragStart={e => handleTileDragStart(e, slot.id, i, slot.isWild ? '★' : slot.letter)}
-                  onDragEnd={handleTileDragEnd}
+                  isWild={slot.isWild}
+                  onPointerDown={e => pointerDown(
+                    e,
+                    { type: 'rack', tileId: slot.id, slotIndex: i },
+                    slot.isWild ? '' : slot.letter,
+                    currentPlayer,
+                  )}
+                  onPointerMove={e => pointerMove(e)}
+                  onPointerUp={e => {
+                    const result = pointerUp(e);
+                    if (!result) return; // tap — no action for rack tiles on tap
+                    const { source, target } = result;
+                    if (source.type !== 'rack') return;
+                    if (target?.type === 'cell') {
+                      placeTile(source.tileId, source.slotIndex, target.col, target.row);
+                    } else if (target?.type === 'rack-slot') {
+                      moveRackTileToSlot(source.tileId, source.slotIndex, target.slotIndex);
+                    }
+                    // Dropped off-board or on rack-area with no specific slot → do nothing
+                  }}
+                  onPointerCancel={e => pointerCancel(e)}
                 />
               )}
             </div>

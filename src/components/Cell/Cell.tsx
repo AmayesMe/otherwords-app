@@ -1,10 +1,8 @@
 import './Cell.css';
-import { useRef } from 'react';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
-import { createTileDragImage } from '../../utils/dragImage';
+import { pointerDown, pointerMove, pointerUp, pointerCancel, shouldSuppressClick } from '../../utils/pointerDrag';
 import type { CellState } from '../../game/types';
-import type { DragData } from '../../store/gameStore';
 
 interface CellProps {
   state: CellState;
@@ -19,78 +17,48 @@ const BONUS_CLASS: Record<number, string>  = { 1: 'bonus-1', 2: 'bonus-2', 3: 'b
 export function Cell({ state, col, row, isCenter }: CellProps) {
   const { tile, bonus, bonusUsed } = state;
   const { placeTile, moveTile, recallTile, isCurrentTurnTile, currentPlayer } = useGameStore();
-  const dragRef = useRef<{ el: HTMLElement; timer: ReturnType<typeof setTimeout> } | null>(null);
   const isThisTurn = isCurrentTurnTile(col, row);
   const showBonus = bonus && !tile && !bonusUsed;
   const showPip   = bonus && bonusUsed && tile;
 
-  function handleDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    const raw = e.dataTransfer.getData('text/plain');
-    if (!raw) return;
-    const data = JSON.parse(raw) as DragData;
-
-    if (data.type === 'rack') {
-      placeTile(data.tileId, data.slotIndex, col, row);
-    } else if (data.type === 'board') {
-      if (data.col !== col || data.row !== row) {
-        moveTile(data.col, data.row, col, row);
-      }
-    }
-  }
-
   function handleTileClick() {
+    if (shouldSuppressClick()) return; // ignore click fired after a drag gesture
     if (isThisTurn) recallTile(col, row);
-  }
-
-  function handleTileDragStart(e: React.DragEvent) {
-    if (!isThisTurn) { e.preventDefault(); return; }
-    const el = e.currentTarget as HTMLElement;
-    const timer = setTimeout(() => el.classList.add('tile-dragging'), 0);
-    dragRef.current = { el, timer };
-
-    const data: DragData = { type: 'board', col, row };
-    e.dataTransfer.setData('text/plain', JSON.stringify(data));
-    e.dataTransfer.effectAllowed = 'move';
-
-    if (tile) {
-      const ghost = createTileDragImage(tile.letter, currentPlayer);
-      document.body.appendChild(ghost);
-      e.dataTransfer.setDragImage(ghost, 25, 25);
-      setTimeout(() => ghost.remove(), 0);
-    }
-  }
-
-  function handleTileDragEnd() {
-    if (dragRef.current) {
-      clearTimeout(dragRef.current.timer);
-      dragRef.current.el.classList.remove('tile-dragging');
-      dragRef.current = null;
-    }
   }
 
   return (
     <div
       className={['cell', showBonus && BONUS_CLASS[bonus!]].filter(Boolean).join(' ')}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      data-drop-col={col}
+      data-drop-row={row}
     >
       {!tile && isCenter && <span className="center-star">★</span>}
       {showBonus && <span className="bonus-label">{BONUS_LABELS[bonus!]}</span>}
 
       {tile && (
         <Tile
-          letter={tile.isWild && tile.wildLetter ? tile.wildLetter : tile.letter}
+          letter={tile.wildLetter ?? (tile.isWild ? '' : tile.letter)}
+          isWild={tile.isWild}
           owner={tile.owner}
           isNew={isThisTurn}
-          draggable={isThisTurn}
-          onDragStart={handleTileDragStart}
-          onDragEnd={handleTileDragEnd}
+          onPointerDown={isThisTurn ? e => pointerDown(e, { type: 'board', col, row }, tile.wildLetter ?? tile.letter, currentPlayer) : undefined}
+          onPointerMove={isThisTurn ? e => pointerMove(e) : undefined}
+          onPointerUp={isThisTurn ? e => {
+            const result = pointerUp(e);
+            if (!result) return; // was a tap — onClick handles recall
+            const { source, target } = result;
+            if (source.type !== 'board') return;
+            if (target?.type === 'cell') {
+              // Dropped on a board cell
+              if (target.col !== source.col || target.row !== source.row) {
+                moveTile(source.col, source.row, target.col, target.row);
+              }
+            } else {
+              // Dropped on rack or off-board — recall
+              recallTile(source.col, source.row);
+            }
+          } : undefined}
+          onPointerCancel={isThisTurn ? e => pointerCancel(e) : undefined}
           onClick={handleTileClick}
         />
       )}

@@ -93,3 +93,51 @@
   display: flex;
   justify-content: center;
 }
+
+/* Online: waiting-for-opponent banner */
+.waiting-banner {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  animation: label-pulse 2.4s ease-in-out infinite;
+}
+
+/* Non-blocking sync error */
+.sync-error {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #FF6B6B;
+  text-align: center;
+  padding: 4px var(--space-2);
+}
+
+/* Leave-game button — fixed top-right */
+.back-btn {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top, 12px));
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms ease, color 150ms ease;
+  z-index: 10;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.7);
+}

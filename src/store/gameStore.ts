@@ -4,6 +4,8 @@ import { validatePlacement } from '../game/turnUtils';
 import { extractNewWords, findConfiscatedCells } from '../game/wordUtils';
 import { loadDictionary, isValidWord } from '../game/dictionary';
 import { TILE_DISTRIBUTION, BLANK_TILE_COUNT, STARTING_RACK_SIZE } from '../game/config';
+import { createGame, joinGame, pushState, subscribeToGame } from '../lib/gameSync';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { BoardState, Player, RackTile, TileData } from '../game/types';
 
 // Rack is a fixed-length array of slots; null means empty slot
@@ -17,11 +19,20 @@ export interface PlacedThisTurn {
   replacedTile: TileData | null;
 }
 
-export type DragData =
-  | { type: 'rack';  tileId: string; slotIndex: number }
-  | { type: 'board'; col: number; row: number };
+/** Subset of game state that gets serialised to Supabase on every turn end. */
+export interface SyncState {
+  board: BoardState;
+  player1Rack: RackSlot[];
+  player2Rack: RackSlot[];
+  player1Score: number;
+  player2Score: number;
+  currentPlayer: Player;
+  tileBag: string[];
+  turnCount: number;
+}
 
 interface GameStore {
+  // ── Core game state ────────────────────────────────────────────────────────
   board: BoardState;
   currentPlayer: Player;
   player1Rack: RackSlot[];
@@ -30,11 +41,18 @@ interface GameStore {
   player2Score: number;
   currentTurnPlacements: Record<string, PlacedThisTurn>;
   tileBag: string[];
-  turnCount: number;         // 0 = first turn of game not yet played
+  turnCount: number;
   turnError: string | null;
   pendingWildAssignment: { col: number; row: number } | null;
 
-  // Actions
+  // ── Multiplayer state ──────────────────────────────────────────────────────
+  screen: 'lobby' | 'playing';
+  gameId: string | null;        // null = local (pass-and-play)
+  myRole: Player | null;        // null = local (you are both players)
+  isWaitingForOpponent: boolean;
+  syncError: string | null;
+
+  // ── Tile-placement actions ─────────────────────────────────────────────────
   placeTile: (tileId: string, slotIndex: number, col: number, row: number) => void;
   moveTile: (fromCol: number, fromRow: number, toCol: number, toRow: number) => void;
   recallTile: (col: number, row: number) => void;
@@ -46,9 +64,17 @@ interface GameStore {
   assignWildLetter: (letter: string) => void;
   cancelWildAssignment: () => void;
 
-  // Helpers
+  // ── Multiplayer actions ────────────────────────────────────────────────────
+  startLocalGame: () => void;
+  createOnlineGame: () => Promise<string>;   // returns join code
+  joinOnlineGame: (code: string) => Promise<void>;
+  applyRemoteRow: (row: { state: SyncState; player2_joined: boolean }) => void;
+  resetToLobby: () => void;
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
   getCurrentRack: () => RackSlot[];
   isCurrentTurnTile: (col: number, row: number) => boolean;
+  isMyTurn: () => boolean;
 }
 
 // ─── Tile bag helpers ────────────────────────────────────────────────────────
@@ -84,10 +110,6 @@ function dealTiles(bag: string[], count: number): { rack: RackSlot[]; bag: strin
 }
 
 function refillRack(rack: RackSlot[], bag: string[]): { rack: RackSlot[]; bag: string[] } {
-  // Always normalise back to exactly STARTING_RACK_SIZE slots.
-  // Collect whatever tiles the player still holds (regardless of rack length,
-  // which may be inflated from a previous bonus draw), then draw just enough
-  // to reach 7. Bonus tiles are appended on top of this in endTurn.
   const held = rack.filter((s): s is RackTile => s !== null);
   const newBag = [...bag];
   const newRack: RackSlot[] = [...held];
@@ -97,7 +119,6 @@ function refillRack(rack: RackSlot[], bag: string[]): { rack: RackSlot[]; bag: s
     newRack.push({ id: makeTileId(), letter, isWild: letter === '*' });
   }
 
-  // Pad with null slots if the bag ran dry
   while (newRack.length < STARTING_RACK_SIZE) {
     newRack.push(null);
   }
@@ -105,11 +126,65 @@ function refillRack(rack: RackSlot[], bag: string[]): { rack: RackSlot[]; bag: s
   return { rack: newRack, bag: newBag };
 }
 
-// ─── Initial state ───────────────────────────────────────────────────────────
+// ─── Sync helpers ────────────────────────────────────────────────────────────
 
-const initBag = createShuffledBag();
-const p1Deal = dealTiles(initBag, STARTING_RACK_SIZE);
-const p2Deal = dealTiles(p1Deal.bag, STARTING_RACK_SIZE);
+function freshGameState(): Omit<SyncState, 'currentPlayer'> & { currentPlayer: Player } {
+  const bag = createShuffledBag();
+  const p1Deal = dealTiles(bag, STARTING_RACK_SIZE);
+  const p2Deal = dealTiles(p1Deal.bag, STARTING_RACK_SIZE);
+  return {
+    board: createEmptyBoard(),
+    currentPlayer: 'player1' as Player,
+    player1Rack: p1Deal.rack,
+    player2Rack: p2Deal.rack,
+    player1Score: 0,
+    player2Score: 0,
+    tileBag: p2Deal.bag,
+    turnCount: 0,
+  };
+}
+
+function extractSyncState(s: GameStore): SyncState {
+  return {
+    board: s.board,
+    player1Rack: s.player1Rack,
+    player2Rack: s.player2Rack,
+    player1Score: s.player1Score,
+    player2Score: s.player2Score,
+    currentPlayer: s.currentPlayer,
+    tileBag: s.tileBag,
+    turnCount: s.turnCount,
+  };
+}
+
+function applySyncState(sync: SyncState): Partial<GameStore> {
+  return {
+    board: sync.board,
+    player1Rack: sync.player1Rack,
+    player2Rack: sync.player2Rack,
+    player1Score: sync.player1Score,
+    player2Score: sync.player2Score,
+    currentPlayer: sync.currentPlayer,
+    tileBag: sync.tileBag,
+    turnCount: sync.turnCount,
+    currentTurnPlacements: {},
+    turnError: null,
+    pendingWildAssignment: null,
+  };
+}
+
+// ─── Real-time channel (module-level, one at a time) ─────────────────────────
+
+let _channel: RealtimeChannel | null = null;
+
+function attachChannel(ch: RealtimeChannel) {
+  if (_channel) { _channel.unsubscribe(); }
+  _channel = ch;
+}
+
+function detachChannel() {
+  if (_channel) { _channel.unsubscribe(); _channel = null; }
+}
 
 // ─── Store helpers ───────────────────────────────────────────────────────────
 
@@ -123,21 +198,40 @@ function setCurrentRack(state: GameStore, rack: RackSlot[]) {
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
+const initial = freshGameState();
+
 export const useGameStore = create<GameStore>((set, get) => ({
-  board: createEmptyBoard(),
-  currentPlayer: 'player1',
-  player1Rack: p1Deal.rack,
-  player2Rack: p2Deal.rack,
-  player1Score: 0,
-  player2Score: 0,
+  // Core game (starts fresh; replaced when a game begins)
+  ...initial,
   currentTurnPlacements: {},
-  tileBag: p2Deal.bag,
-  turnCount: 0,
   turnError: null,
   pendingWildAssignment: null,
 
-  getCurrentRack: () => getCurrentRackSlots(get()),
+  // Multiplayer
+  screen: 'lobby',
+  gameId: null,
+  myRole: null,
+  isWaitingForOpponent: false,
+  syncError: null,
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  getCurrentRack: () => {
+    const { gameId, myRole, currentPlayer, player1Rack, player2Rack } = get();
+    // In online mode always show YOUR rack, not the active player's rack
+    const player = (gameId && myRole) ? myRole : currentPlayer;
+    return player === 'player1' ? player1Rack : player2Rack;
+  },
+
   isCurrentTurnTile: (col, row) => `${col},${row}` in get().currentTurnPlacements,
+
+  isMyTurn: () => {
+    const { gameId, myRole, currentPlayer } = get();
+    if (!gameId) return true;          // local: always your turn
+    return myRole === currentPlayer;   // online: only when it's your role
+  },
+
+  // ── Tile placement ────────────────────────────────────────────────────────
 
   placeTile(tileId, slotIndex, col, row) {
     const state = get();
@@ -316,20 +410,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   async endTurn() {
     const state = get();
-    const { board, currentTurnPlacements, currentPlayer, tileBag, turnCount } = state;
+    const { board, currentTurnPlacements, currentPlayer, tileBag, turnCount, gameId } = state;
 
-    // Validate placement geometry
     const result = validatePlacement(board, currentTurnPlacements, turnCount === 0);
     if (!result.valid) {
       set({ turnError: result.error ?? 'Invalid placement.' });
       return;
     }
 
-    // Validate words against dictionary (ensures the word set is loaded)
     await loadDictionary();
     const newWords = extractNewWords(board, currentTurnPlacements);
     for (const word of newWords) {
-      // Skip validation for words containing unassigned wild tiles (letter not yet chosen)
       if (word.containsWild) continue;
       if (!isValidWord(word.letters)) {
         set({ turnError: `Not a word: ${word.letters.toUpperCase()}` });
@@ -337,7 +428,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Commit: mark bonus spaces as used and tally extra tiles earned
     const newBoard: BoardState = board.map(r => r.map(c => ({ ...c })));
     let bonusTilesEarned = 0;
     for (const key of Object.keys(currentTurnPlacements)) {
@@ -349,10 +439,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Confiscation: if a word was EXTENDED this turn (letters added to either
-    // end, making it longer), all tiles in that word flip to the current
-    // player's color — including any opponent tiles already in the word.
-    // Crossing through a word or replacing a letter in-place does NOT confiscate.
     const confiscated = findConfiscatedCells(newBoard, currentTurnPlacements, newWords);
     for (const { col, row } of confiscated) {
       const cell = newBoard[row][col];
@@ -361,11 +447,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Refill current player's rack back to standard size, then draw bonus tiles
     const currentRack = getCurrentRackSlots(state);
     const refilled = refillRack(currentRack, tileBag);
 
-    // Append bonus tiles to the end of the rack (rack grows temporarily)
     let finalRack: RackSlot[] = [...refilled.rack];
     let finalBag = [...refilled.bag];
     for (let i = 0; i < bonusTilesEarned; i++) {
@@ -375,10 +459,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Update scores from committed board
     const scores = countScore(newBoard);
-
-    // Switch player
     const nextPlayer: Player = currentPlayer === 'player1' ? 'player2' : 'player1';
     const rackUpdate = currentPlayer === 'player1'
       ? { player1Rack: finalRack }
@@ -394,6 +475,108 @@ export const useGameStore = create<GameStore>((set, get) => ({
       player1Score: scores.player1,
       player2Score: scores.player2,
       ...rackUpdate,
+    });
+
+    // Push to Supabase after a successful turn (online mode only)
+    if (gameId) {
+      pushState(gameId, extractSyncState(get())).catch(() => {
+        set({ syncError: 'Turn saved locally but failed to sync. Your opponent may not see it.' });
+      });
+    }
+  },
+
+  // ── Multiplayer actions ───────────────────────────────────────────────────
+
+  startLocalGame() {
+    detachChannel();
+    localStorage.removeItem('ow_game');
+    const fresh = freshGameState();
+    set({
+      ...fresh,
+      currentTurnPlacements: {},
+      turnError: null,
+      pendingWildAssignment: null,
+      screen: 'playing',
+      gameId: null,
+      myRole: null,
+      isWaitingForOpponent: false,
+      syncError: null,
+    });
+  },
+
+  async createOnlineGame() {
+    const fresh = freshGameState();
+    const syncState: SyncState = { ...fresh };
+
+    const gameId = await createGame(syncState);
+
+    set({
+      ...fresh,
+      currentTurnPlacements: {},
+      turnError: null,
+      pendingWildAssignment: null,
+      gameId,
+      myRole: 'player1',
+      isWaitingForOpponent: true,
+      syncError: null,
+      // Stay on lobby screen until opponent joins
+    });
+
+    localStorage.setItem('ow_game', JSON.stringify({ gameId, role: 'player1' }));
+
+    attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)));
+
+    return gameId;
+  },
+
+  async joinOnlineGame(code: string) {
+    const syncState = await joinGame(code);
+    const gameId = code.toUpperCase().trim();
+
+    set({
+      ...applySyncState(syncState),
+      gameId,
+      myRole: 'player2',
+      isWaitingForOpponent: false,
+      syncError: null,
+      screen: 'playing',
+    });
+
+    localStorage.setItem('ow_game', JSON.stringify({ gameId, role: 'player2' }));
+
+    attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)));
+  },
+
+  applyRemoteRow(row) {
+    const { isWaitingForOpponent, turnCount } = get();
+    const update: Partial<GameStore> = {};
+
+    // Player 1 sees opponent connect → start the game
+    if (isWaitingForOpponent && row.player2_joined) {
+      update.isWaitingForOpponent = false;
+      update.screen = 'playing';
+    }
+
+    // Apply opponent's committed turn (ignore our own echo via turnCount guard)
+    if (row.state.turnCount > turnCount) {
+      Object.assign(update, applySyncState(row.state));
+    }
+
+    if (Object.keys(update).length > 0) set(update as GameStore);
+  },
+
+  resetToLobby() {
+    detachChannel();
+    localStorage.removeItem('ow_game');
+    set({
+      screen: 'lobby',
+      gameId: null,
+      myRole: null,
+      isWaitingForOpponent: false,
+      syncError: null,
+      turnError: null,
+      currentTurnPlacements: {},
+      pendingWildAssignment: null,
     });
   },
 }));

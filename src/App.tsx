@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { Board } from './components/Board/Board';
 import { Rack } from './components/Rack/Rack';
 import { LetterPicker } from './components/LetterPicker/LetterPicker';
+import { Lobby } from './components/Lobby/Lobby';
 import { Tile } from './components/Tile/Tile';
 import { useGameStore } from './store/gameStore';
 import { countScore } from './game/boardUtils';
@@ -35,8 +36,6 @@ function ScoreGroup({ score, projected, owner, label, labelSide, isActive }: Sco
     <span className={`score-label ${isActive ? 'score-label-active' : ''}`}>{label}</span>
   );
 
-  // Digit column: actual score on top, projected (half-size) centred beneath.
-  // The projected row is always rendered (visibility toggled) to hold layout height.
   const digitCol = (
     <div className="score-digit-col">
       <div className="score-digits">
@@ -62,11 +61,17 @@ function ScoreGroup({ score, projected, owner, label, labelSide, isActive }: Sco
 
 export default function App() {
   const {
+    screen,
     board,
     currentPlayer,
     player1Score,
     player2Score,
     currentTurnPlacements,
+    myRole,
+    gameId,
+    isMyTurn,
+    syncError,
+    resetToLobby,
   } = useGameStore();
 
   const projectedScore = useMemo(() => {
@@ -83,6 +88,14 @@ export default function App() {
     return countScore(projBoard);
   }, [board, currentTurnPlacements, currentPlayer]);
 
+  // Show lobby when screen === 'lobby'
+  if (screen === 'lobby') return <Lobby />;
+
+  // In online games, show "You" / "Opponent" instead of "Player 1" / "Player 2"
+  const p1Label = gameId ? (myRole === 'player1' ? 'You' : 'Opponent') : 'Player 1';
+  const p2Label = gameId ? (myRole === 'player2' ? 'You' : 'Opponent') : 'Player 2';
+  const myTurn = isMyTurn();
+
   return (
     <div className="app">
       <header className="score-bar">
@@ -90,7 +103,7 @@ export default function App() {
           score={player1Score}
           projected={projectedScore?.player1 ?? null}
           owner="player1"
-          label="Player 1"
+          label={p1Label}
           labelSide="left"
           isActive={currentPlayer === 'player1'}
         />
@@ -98,11 +111,20 @@ export default function App() {
           score={player2Score}
           projected={projectedScore?.player2 ?? null}
           owner="player2"
-          label="Player 2"
+          label={p2Label}
           labelSide="right"
           isActive={currentPlayer === 'player2'}
         />
       </header>
+
+      {/* Shown in online games when waiting for the opponent to move */}
+      {gameId && !myTurn && (
+        <div className="waiting-banner">Waiting for opponent…</div>
+      )}
+
+      {syncError && (
+        <div className="sync-error">{syncError}</div>
+      )}
 
       <main className="board-area">
         <Board board={board} />
@@ -113,6 +135,10 @@ export default function App() {
       </footer>
 
       <LetterPicker />
+
+      {gameId && (
+        <button className="back-btn" onClick={resetToLobby} title="Leave game">✕</button>
+      )}
     </div>
   );
 }

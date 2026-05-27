@@ -4,8 +4,9 @@ import { useGameStore } from '../../store/gameStore';
 import { pointerDown, pointerMove, pointerUp, pointerCancel } from '../../utils/pointerDrag';
 
 export function Rack() {
-  const { getCurrentRack, currentPlayer, recallAllTiles, moveRackTileToSlot, placeTile, shuffleRack, endTurn, turnError } = useGameStore();
+  const { getCurrentRack, currentPlayer, recallAllTiles, moveRackTileToSlot, placeTile, shuffleRack, endTurn, turnError, isMyTurn } = useGameStore();
   const slots = getCurrentRack();
+  const canPlay = isMyTurn();
 
   return (
     <div className="rack-wrapper">
@@ -23,16 +24,16 @@ export function Rack() {
                   letter={slot.isWild ? '' : slot.letter}
                   owner={currentPlayer}
                   isWild={slot.isWild}
-                  onPointerDown={e => pointerDown(
+                  onPointerDown={canPlay ? e => pointerDown(
                     e,
                     { type: 'rack', tileId: slot.id, slotIndex: i },
                     slot.isWild ? '' : slot.letter,
                     currentPlayer,
-                  )}
-                  onPointerMove={e => pointerMove(e)}
-                  onPointerUp={e => {
+                  ) : undefined}
+                  onPointerMove={canPlay ? e => pointerMove(e) : undefined}
+                  onPointerUp={canPlay ? e => {
                     const result = pointerUp(e);
-                    if (!result) return; // tap — no action for rack tiles on tap
+                    if (!result) return;
                     const { source, target } = result;
                     if (source.type !== 'rack') return;
                     if (target?.type === 'cell') {
@@ -40,9 +41,8 @@ export function Rack() {
                     } else if (target?.type === 'rack-slot') {
                       moveRackTileToSlot(source.tileId, source.slotIndex, target.slotIndex);
                     }
-                    // Dropped off-board or on rack-area with no specific slot → do nothing
-                  }}
-                  onPointerCancel={e => pointerCancel(e)}
+                  } : undefined}
+                  onPointerCancel={canPlay ? e => pointerCancel(e) : undefined}
                 />
               )}
             </div>
@@ -52,8 +52,8 @@ export function Rack() {
       </div>
       {turnError && <div className="turn-error">{turnError}</div>}
       <div className="turn-controls">
-        <button className="btn btn-secondary" onClick={recallAllTiles}>Reset Turn</button>
-        <button className="btn btn-primary" onClick={endTurn}>End Turn</button>
+        <button className="btn btn-secondary" onClick={recallAllTiles} disabled={!canPlay}>Reset Turn</button>
+        <button className="btn btn-primary" onClick={endTurn} disabled={!canPlay}>End Turn</button>
       </div>
     </div>
   );

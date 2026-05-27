@@ -1,4 +1,5 @@
 import './Rack.css';
+import { useState } from 'react';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
 import { createTileDragImage } from '../../utils/dragImage';
@@ -7,8 +8,10 @@ import type { DragData } from '../../store/gameStore';
 export function Rack() {
   const { getCurrentRack, currentPlayer, recallTile, recallAllTiles, moveRackTileToSlot } = useGameStore();
   const slots = getCurrentRack();
+  const [draggingSlot, setDraggingSlot] = useState<number | null>(null);
 
   function handleTileDragStart(e: React.DragEvent, tileId: string, slotIndex: number, letter: string) {
+    setDraggingSlot(slotIndex);
     const data: DragData = { type: 'rack', tileId, slotIndex };
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
@@ -55,7 +58,9 @@ export function Rack() {
                 letter={slot.isWild ? '★' : slot.letter}
                 owner={currentPlayer}
                 draggable
+                isDragging={draggingSlot === i}
                 onDragStart={e => handleTileDragStart(e, slot.id, i, slot.isWild ? '★' : slot.letter)}
+                onDragEnd={() => setDraggingSlot(null)}
               />
             )}
           </div>

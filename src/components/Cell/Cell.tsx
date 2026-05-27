@@ -1,4 +1,5 @@
 import './Cell.css';
+import { useState } from 'react';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
 import { createTileDragImage } from '../../utils/dragImage';
@@ -18,6 +19,7 @@ const BONUS_CLASS: Record<number, string>  = { 1: 'bonus-1', 2: 'bonus-2', 3: 'b
 export function Cell({ state, col, row, isCenter }: CellProps) {
   const { tile, bonus, bonusUsed } = state;
   const { placeTile, moveTile, recallTile, isCurrentTurnTile, currentPlayer } = useGameStore();
+  const [isDraggingOut, setIsDraggingOut] = useState(false);
   const isThisTurn = isCurrentTurnTile(col, row);
   const showBonus = bonus && !tile && !bonusUsed;
   const showPip   = bonus && bonusUsed && tile;
@@ -48,6 +50,7 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
 
   function handleTileDragStart(e: React.DragEvent) {
     if (!isThisTurn) { e.preventDefault(); return; }
+    setIsDraggingOut(true);
     const data: DragData = { type: 'board', col, row };
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
@@ -58,6 +61,10 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
       e.dataTransfer.setDragImage(ghost, 25, 25);
       setTimeout(() => ghost.remove(), 0);
     }
+  }
+
+  function handleTileDragEnd() {
+    setIsDraggingOut(false);
   }
 
   return (
@@ -75,7 +82,9 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
           owner={tile.owner}
           isNew={isThisTurn}
           draggable={isThisTurn}
+          isDragging={isDraggingOut}
           onDragStart={handleTileDragStart}
+          onDragEnd={handleTileDragEnd}
           onClick={handleTileClick}
         />
       )}

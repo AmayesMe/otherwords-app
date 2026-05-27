@@ -6,23 +6,26 @@ interface TileProps {
   owner: Player;
   isFlipping?: boolean;
   isNew?: boolean;
+  isDragging?: boolean;
   bonusValue?: BonusValue | null;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
   onClick?: () => void;
   className?: string;
 }
 
 export function Tile({
-  letter, owner, isFlipping = false, isNew = false,
-  draggable = false, onDragStart, onClick, className = '',
+  letter, owner, isFlipping = false, isNew = false, isDragging = false,
+  draggable = false, onDragStart, onDragEnd, onClick, className = '',
 }: TileProps) {
   const isP1 = owner === 'player1';
   return (
     <div
-      className={['tile-container', isNew && 'tile-new', className].filter(Boolean).join(' ')}
+      className={['tile-container', isNew && 'tile-new', isDragging && 'tile-dragging', className].filter(Boolean).join(' ')}
       draggable={draggable}
       onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onClick={onClick}
       style={{ cursor: draggable ? 'grab' : onClick ? 'pointer' : 'default' }}
     >

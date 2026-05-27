@@ -12,6 +12,11 @@
   filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.5));
 }
 
+.tile-container.tile-dragging {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
 .tile-inner {
   width: 100%;
   height: 100%;

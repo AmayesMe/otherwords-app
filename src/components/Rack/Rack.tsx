@@ -6,7 +6,7 @@ import { createTileDragImage } from '../../utils/dragImage';
 import type { DragData } from '../../store/gameStore';
 
 export function Rack() {
-  const { getCurrentRack, currentPlayer, recallTile, recallAllTiles, moveRackTileToSlot, shuffleRack } = useGameStore();
+  const { getCurrentRack, currentPlayer, recallTile, recallAllTiles, moveRackTileToSlot, shuffleRack, endTurn, turnError } = useGameStore();
   const slots = getCurrentRack();
   const dragRef = useRef<{ el: HTMLElement; timer: ReturnType<typeof setTimeout> } | null>(null);
 
@@ -76,9 +76,10 @@ export function Rack() {
         </div>
         <button className="btn btn-icon" onClick={shuffleRack} title="Shuffle tiles">⇄</button>
       </div>
+      {turnError && <div className="turn-error">{turnError}</div>}
       <div className="turn-controls">
         <button className="btn btn-secondary" onClick={recallAllTiles}>Reset Turn</button>
-        <button className="btn btn-primary">End Turn</button>
+        <button className="btn btn-primary" onClick={endTurn}>End Turn</button>
       </div>
     </div>
   );

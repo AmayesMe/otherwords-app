@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import { createEmptyBoard } from '../game/boardUtils';
+import { createEmptyBoard, countScore } from '../game/boardUtils';
+import { validatePlacement } from '../game/turnUtils';
+import { TILE_DISTRIBUTION, BLANK_TILE_COUNT, STARTING_RACK_SIZE } from '../game/config';
 import type { BoardState, Player, RackTile, TileData } from '../game/types';
 
 // Rack is a fixed-length array of slots; null means empty slot
@@ -25,6 +27,9 @@ interface GameStore {
   player1Score: number;
   player2Score: number;
   currentTurnPlacements: Record<string, PlacedThisTurn>;
+  tileBag: string[];
+  turnCount: number;         // 0 = first turn of game not yet played
+  turnError: string | null;
 
   // Actions
   placeTile: (tileId: string, slotIndex: number, col: number, row: number) => void;
@@ -34,21 +39,64 @@ interface GameStore {
   swapRackSlots: (fromIndex: number, toIndex: number) => void;
   moveRackTileToSlot: (tileId: string, fromIndex: number, toIndex: number) => void;
   shuffleRack: () => void;
+  endTurn: () => void;
 
   // Helpers
   getCurrentRack: () => RackSlot[];
   isCurrentTurnTile: (col: number, row: number) => boolean;
 }
 
-const STARTING_RACK: RackSlot[] = [
-  { id: 'r1', letter: 'S', isWild: false },
-  { id: 'r2', letter: 'T', isWild: false },
-  { id: 'r3', letter: 'A', isWild: false },
-  { id: 'r4', letter: 'R', isWild: false },
-  { id: 'r5', letter: 'E', isWild: false },
-  { id: 'r6', letter: 'N', isWild: false },
-  { id: 'r7', letter: 'D', isWild: false },
-];
+// ─── Tile bag helpers ────────────────────────────────────────────────────────
+
+function createShuffledBag(): string[] {
+  const bag: string[] = [];
+  for (const [letter, count] of Object.entries(TILE_DISTRIBUTION)) {
+    for (let i = 0; i < count; i++) bag.push(letter);
+  }
+  for (let i = 0; i < BLANK_TILE_COUNT; i++) bag.push('*');
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+  return bag;
+}
+
+let _tileIdSeq = 0;
+function makeTileId() { return `t${++_tileIdSeq}`; }
+
+function dealTiles(bag: string[], count: number): { rack: RackSlot[]; bag: string[] } {
+  const remaining = [...bag];
+  const rack: RackSlot[] = [];
+  for (let i = 0; i < count; i++) {
+    if (remaining.length > 0) {
+      const letter = remaining.pop()!;
+      rack.push({ id: makeTileId(), letter, isWild: letter === '*' });
+    } else {
+      rack.push(null);
+    }
+  }
+  return { rack, bag: remaining };
+}
+
+function refillRack(rack: RackSlot[], bag: string[]): { rack: RackSlot[]; bag: string[] } {
+  const newRack = [...rack];
+  const newBag = [...bag];
+  for (let i = 0; i < newRack.length; i++) {
+    if (newRack[i] === null && newBag.length > 0) {
+      const letter = newBag.pop()!;
+      newRack[i] = { id: makeTileId(), letter, isWild: letter === '*' };
+    }
+  }
+  return { rack: newRack, bag: newBag };
+}
+
+// ─── Initial state ───────────────────────────────────────────────────────────
+
+const initBag = createShuffledBag();
+const p1Deal = dealTiles(initBag, STARTING_RACK_SIZE);
+const p2Deal = dealTiles(p1Deal.bag, STARTING_RACK_SIZE);
+
+// ─── Store helpers ───────────────────────────────────────────────────────────
 
 function getCurrentRackSlots(state: GameStore): RackSlot[] {
   return state.currentPlayer === 'player1' ? state.player1Rack : state.player2Rack;
@@ -58,14 +106,19 @@ function setCurrentRack(state: GameStore, rack: RackSlot[]) {
   return state.currentPlayer === 'player1' ? { player1Rack: rack } : { player2Rack: rack };
 }
 
+// ─── Store ───────────────────────────────────────────────────────────────────
+
 export const useGameStore = create<GameStore>((set, get) => ({
   board: createEmptyBoard(),
   currentPlayer: 'player1',
-  player1Rack: [...STARTING_RACK],
-  player2Rack: [],
+  player1Rack: p1Deal.rack,
+  player2Rack: p2Deal.rack,
   player1Score: 0,
   player2Score: 0,
   currentTurnPlacements: {},
+  tileBag: p2Deal.bag,
+  turnCount: 0,
+  turnError: null,
 
   getCurrentRack: () => getCurrentRackSlots(get()),
   isCurrentTurnTile: (col, row) => `${col},${row}` in get().currentTurnPlacements,
@@ -86,12 +139,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       tile: { letter: rackTile.letter, owner: state.currentPlayer, isWild: rackTile.isWild },
     };
 
-    // Clear the rack slot; if a this-turn tile was already here, restore its displaced tile back
     const newRack = [...rack];
     newRack[slotIndex] = null;
 
     if (existingPlacement) {
-      // Put the displaced this-turn tile back into its original rack slot
       newRack[existingPlacement.rackSlotIndex] = {
         id: existingPlacement.rackTileId,
         letter: existingPlacement.letter,
@@ -110,7 +161,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
     };
 
-    set({ board: newBoard, currentTurnPlacements: newPlacements, ...setCurrentRack(state, newRack) });
+    set({ board: newBoard, currentTurnPlacements: newPlacements, turnError: null, ...setCurrentRack(state, newRack) });
   },
 
   moveTile(fromCol, fromRow, toCol, toRow) {
@@ -137,7 +188,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       replacedTile: existingAtTarget ? existingAtTarget.replacedTile : toCell.tile,
     };
 
-    // If the target had a this-turn tile, bump it back to its rack slot
     const newRack = [...getCurrentRackSlots(state)];
     if (existingAtTarget) {
       newRack[existingAtTarget.rackSlotIndex] = {
@@ -147,7 +197,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
-    set({ board: newBoard, currentTurnPlacements: newPlacements, ...setCurrentRack(state, newRack) });
+    set({ board: newBoard, currentTurnPlacements: newPlacements, turnError: null, ...setCurrentRack(state, newRack) });
   },
 
   recallTile(col, row) {
@@ -166,7 +216,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newPlacements = { ...state.currentTurnPlacements };
     delete newPlacements[key];
 
-    set({ board: newBoard, currentTurnPlacements: newPlacements, ...setCurrentRack(state, newRack) });
+    set({ board: newBoard, currentTurnPlacements: newPlacements, turnError: null, ...setCurrentRack(state, newRack) });
   },
 
   recallAllTiles() {
@@ -180,7 +230,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newRack[placement.rackSlotIndex] = { id: placement.rackTileId, letter: placement.letter, isWild: placement.isWild };
     }
 
-    set({ board: newBoard, currentTurnPlacements: {}, ...setCurrentRack(state, newRack) });
+    set({ board: newBoard, currentTurnPlacements: {}, turnError: null, ...setCurrentRack(state, newRack) });
   },
 
   swapRackSlots(fromIndex, toIndex) {
@@ -195,7 +245,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newRack = [...getCurrentRackSlots(state)];
     const tile = newRack[fromIndex];
     if (!tile || tile.id !== tileId) return;
-    // Swap with target (whether occupied or empty)
     [newRack[fromIndex], newRack[toIndex]] = [newRack[toIndex], newRack[fromIndex]];
     set(setCurrentRack(state, newRack));
   },
@@ -203,7 +252,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   shuffleRack() {
     const state = get();
     const rack = [...getCurrentRackSlots(state)];
-    // Only shuffle the non-null slots so placed-tile recall indices stay valid
     const filledIndices = rack.map((slot, i) => slot !== null ? i : -1).filter(i => i !== -1);
     const tiles = filledIndices.map(i => rack[i]);
     for (let i = tiles.length - 1; i > 0; i--) {
@@ -212,5 +260,52 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     filledIndices.forEach((slotIndex, i) => { rack[slotIndex] = tiles[i]; });
     set(setCurrentRack(state, rack));
+  },
+
+  endTurn() {
+    const state = get();
+    const { board, currentTurnPlacements, currentPlayer, tileBag, turnCount } = state;
+
+    // Validate
+    const result = validatePlacement(board, currentTurnPlacements, turnCount === 0);
+    if (!result.valid) {
+      set({ turnError: result.error ?? 'Invalid placement.' });
+      return;
+    }
+
+    // Commit: mark bonus spaces as used on placed tiles
+    const newBoard: BoardState = board.map(r => r.map(c => ({ ...c })));
+    for (const key of Object.keys(currentTurnPlacements)) {
+      const [col, row] = key.split(',').map(Number);
+      const cell = newBoard[row][col];
+      if (cell.bonus && !cell.bonusUsed) {
+        newBoard[row][col] = { ...cell, bonusUsed: true };
+      }
+    }
+
+    // Refill current player's rack from bag
+    const currentRack = getCurrentRackSlots(state);
+    const refilled = refillRack(currentRack, tileBag);
+
+    // Update scores from committed board
+    const scores = countScore(newBoard);
+
+    // Switch player
+    const nextPlayer: Player = currentPlayer === 'player1' ? 'player2' : 'player1';
+    const rackUpdate = currentPlayer === 'player1'
+      ? { player1Rack: refilled.rack }
+      : { player2Rack: refilled.rack };
+
+    set({
+      board: newBoard,
+      currentTurnPlacements: {},
+      currentPlayer: nextPlayer,
+      tileBag: refilled.bag,
+      turnCount: turnCount + 1,
+      turnError: null,
+      player1Score: scores.player1,
+      player2Score: scores.player2,
+      ...rackUpdate,
+    });
   },
 }));

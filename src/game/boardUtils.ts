@@ -24,8 +24,11 @@ export function countScore(board: BoardState): { player1: number; player2: numbe
   let player2 = 0;
   for (const row of board) {
     for (const cell of row) {
-      if (cell.tile?.owner === 'player1') player1++;
-      else if (cell.tile?.owner === 'player2') player2++;
+      if (!cell.tile) continue;
+      // Bonus adds to territory value when it's been claimed (tile committed on bonus space)
+      const value = 1 + (cell.bonusUsed && cell.bonus ? cell.bonus : 0);
+      if (cell.tile.owner === 'player1') player1 += value;
+      else player2 += value;
     }
   }
   return { player1, player2 };

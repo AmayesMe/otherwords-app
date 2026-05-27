@@ -4,7 +4,7 @@ import { validatePlacement } from '../game/turnUtils';
 import { extractNewWords, findConfiscatedCells } from '../game/wordUtils';
 import { loadDictionary, isValidWord } from '../game/dictionary';
 import { TILE_DISTRIBUTION, BLANK_TILE_COUNT, STARTING_RACK_SIZE } from '../game/config';
-import { createGame, joinGame, pushState, subscribeToGame } from '../lib/gameSync';
+import { createGame, joinGame, pushState, subscribeToGame, getGame } from '../lib/gameSync';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { BoardState, Player, RackTile, TileData } from '../game/types';
 
@@ -17,6 +17,12 @@ export interface PlacedThisTurn {
   letter: string;
   isWild: boolean;
   replacedTile: TileData | null;
+}
+
+/** A game the player has created or joined on this device. */
+export interface SavedGame {
+  gameId: string;
+  role: Player;
 }
 
 /** Subset of game state that gets serialised to Supabase on every turn end. */
@@ -51,6 +57,7 @@ interface GameStore {
   myRole: Player | null;        // null = local (you are both players)
   isWaitingForOpponent: boolean;
   syncError: string | null;
+  savedGames: SavedGame[];      // games this device has created or joined
 
   // ── Tile-placement actions ─────────────────────────────────────────────────
   placeTile: (tileId: string, slotIndex: number, col: number, row: number) => void;
@@ -68,6 +75,8 @@ interface GameStore {
   startLocalGame: () => void;
   createOnlineGame: () => Promise<string>;   // returns join code
   joinOnlineGame: (code: string) => Promise<void>;
+  resumeGame: (gameId: string, role: Player) => Promise<void>;
+  removeSavedGame: (gameId: string) => void;
   applyRemoteRow: (row: { state: SyncState; player2_joined: boolean }) => void;
   resetToLobby: () => void;
 
@@ -173,6 +182,38 @@ function applySyncState(sync: SyncState): Partial<GameStore> {
   };
 }
 
+// ─── Saved-games persistence ─────────────────────────────────────────────────
+
+const SAVED_KEY = 'ow_games';
+
+function loadSavedGames(): SavedGame[] {
+  try {
+    // Migrate from the old single-game format (ow_game → ow_games)
+    const legacy = localStorage.getItem('ow_game');
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      if (parsed?.gameId && parsed?.role) {
+        const migrated: SavedGame[] = [{ gameId: parsed.gameId, role: parsed.role as Player }];
+        localStorage.setItem(SAVED_KEY, JSON.stringify(migrated));
+        localStorage.removeItem('ow_game');
+        return migrated;
+      }
+    }
+    const raw = localStorage.getItem(SAVED_KEY);
+    return raw ? (JSON.parse(raw) as SavedGame[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedGames(games: SavedGame[]): void {
+  localStorage.setItem(SAVED_KEY, JSON.stringify(games.slice(0, 20)));
+}
+
+function upsertSavedGame(existing: SavedGame[], gameId: string, role: Player): SavedGame[] {
+  return [{ gameId, role }, ...existing.filter(g => g.gameId !== gameId)];
+}
+
 // ─── Real-time channel (module-level, one at a time) ─────────────────────────
 
 let _channel: RealtimeChannel | null = null;
@@ -213,6 +254,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   myRole: null,
   isWaitingForOpponent: false,
   syncError: null,
+  savedGames: loadSavedGames(),
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -489,7 +531,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startLocalGame() {
     detachChannel();
-    localStorage.removeItem('ow_game');
     const fresh = freshGameState();
     set({
       ...fresh,
@@ -522,7 +563,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Stay on lobby screen until opponent joins
     });
 
-    localStorage.setItem('ow_game', JSON.stringify({ gameId, role: 'player1' }));
+    const newSaved = upsertSavedGame(get().savedGames, gameId, 'player1');
+    set({ savedGames: newSaved });
+    persistSavedGames(newSaved);
 
     attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)));
 
@@ -542,9 +585,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
       screen: 'playing',
     });
 
-    localStorage.setItem('ow_game', JSON.stringify({ gameId, role: 'player2' }));
+    const newSaved = upsertSavedGame(get().savedGames, gameId, 'player2');
+    set({ savedGames: newSaved });
+    persistSavedGames(newSaved);
 
     attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)));
+  },
+
+  async resumeGame(gameId, role) {
+    const data = await getGame(gameId);
+    if (!data) throw new Error('Game not found — it may have expired.');
+
+    if (data.player2_joined) {
+      set({
+        ...applySyncState(data.state),
+        gameId,
+        myRole: role,
+        isWaitingForOpponent: false,
+        syncError: null,
+        screen: 'playing',
+      });
+    } else {
+      // Still waiting for opponent — restore waiting state, stay on lobby
+      set({
+        ...applySyncState(data.state),
+        gameId,
+        myRole: role,
+        isWaitingForOpponent: true,
+        syncError: null,
+        screen: 'lobby',
+      });
+    }
+
+    attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)));
+  },
+
+  removeSavedGame(gameId) {
+    const newSaved = get().savedGames.filter(g => g.gameId !== gameId);
+    set({ savedGames: newSaved });
+    persistSavedGames(newSaved);
   },
 
   applyRemoteRow(row) {
@@ -567,7 +646,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   resetToLobby() {
     detachChannel();
-    localStorage.removeItem('ow_game');
     set({
       screen: 'lobby',
       gameId: null,

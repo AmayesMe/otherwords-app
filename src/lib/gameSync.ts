@@ -91,6 +91,19 @@ export interface GameRow {
   player2_joined: boolean;
 }
 
+/** Fetch current row for a game. Returns null if not found or on error. */
+export async function getGame(
+  gameId: string,
+): Promise<GameRow | null> {
+  const { data, error } = await supabase
+    .from('games')
+    .select('state, player2_joined')
+    .eq('id', gameId)
+    .single();
+  if (error || !data) return null;
+  return data as GameRow;
+}
+
 /** Subscribe to game updates. Returns the channel for later cleanup. */
 export function subscribeToGame(
   gameId: string,

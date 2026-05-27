@@ -13,24 +13,29 @@ export interface BonusSpaceConfig {
   bonus: BonusValue;
 }
 
+// Bonus positions extracted directly from Figma design (FgWK7wycaMUognXTB91vT7)
 export const BONUS_SPACES: BonusSpaceConfig[] = [
   // Triple (+3) — four corners
   { col: 0,  row: 0,  bonus: 3 }, { col: 12, row: 0,  bonus: 3 },
   { col: 0,  row: 12, bonus: 3 }, { col: 12, row: 12, bonus: 3 },
-  // Double (+2) — edges at positions 4 and 8
-  { col: 4,  row: 0,  bonus: 2 }, { col: 8,  row: 0,  bonus: 2 },
-  { col: 0,  row: 4,  bonus: 2 }, { col: 0,  row: 8,  bonus: 2 },
-  { col: 12, row: 4,  bonus: 2 }, { col: 12, row: 8,  bonus: 2 },
-  { col: 4,  row: 12, bonus: 2 }, { col: 8,  row: 12, bonus: 2 },
-  // Single (+1) — interior (best estimate; tune via board editor)
-  { col: 1,  row: 1,  bonus: 1 }, { col: 11, row: 1,  bonus: 1 },
-  { col: 1,  row: 11, bonus: 1 }, { col: 11, row: 11, bonus: 1 },
-  { col: 3,  row: 3,  bonus: 1 }, { col: 9,  row: 3,  bonus: 1 },
-  { col: 3,  row: 9,  bonus: 1 }, { col: 9,  row: 9,  bonus: 1 },
-  { col: 2,  row: 6,  bonus: 1 }, { col: 6,  row: 2,  bonus: 1 },
-  { col: 10, row: 6,  bonus: 1 }, { col: 6,  row: 10, bonus: 1 },
-  { col: 5,  row: 5,  bonus: 1 }, { col: 7,  row: 5,  bonus: 1 },
-  { col: 5,  row: 7,  bonus: 1 }, { col: 7,  row: 7,  bonus: 1 },
+
+  // Double (+2) — 8 positions
+  { col: 6,  row: 0,  bonus: 2 },
+  { col: 2,  row: 2,  bonus: 2 }, { col: 10, row: 2,  bonus: 2 },
+  { col: 0,  row: 6,  bonus: 2 }, { col: 12, row: 6,  bonus: 2 },
+  { col: 2,  row: 10, bonus: 2 }, { col: 10, row: 10, bonus: 2 },
+  { col: 6,  row: 12, bonus: 2 },
+
+  // Single (+1) — 16 positions
+  { col: 4,  row: 1,  bonus: 1 }, { col: 8,  row: 1,  bonus: 1 },
+  { col: 6,  row: 3,  bonus: 1 },
+  { col: 1,  row: 4,  bonus: 1 }, { col: 4,  row: 4,  bonus: 1 },
+  { col: 8,  row: 4,  bonus: 1 }, { col: 11, row: 4,  bonus: 1 },
+  { col: 3,  row: 6,  bonus: 1 }, { col: 9,  row: 6,  bonus: 1 },
+  { col: 1,  row: 8,  bonus: 1 }, { col: 4,  row: 8,  bonus: 1 },
+  { col: 8,  row: 8,  bonus: 1 }, { col: 11, row: 8,  bonus: 1 },
+  { col: 6,  row: 9,  bonus: 1 },
+  { col: 4,  row: 11, bonus: 1 }, { col: 8,  row: 11, bonus: 1 },
 ];
 
 export const TILE_DISTRIBUTION: Record<string, number> = {

@@ -7,6 +7,27 @@ export interface ValidationResult {
   error?: string;
 }
 
+// BFS connectivity check — returns true if all tiles in the set are reachable from any one of them
+function isConnected(tileSet: Set<string>): boolean {
+  if (tileSet.size <= 1) return true;
+  const visited = new Set<string>();
+  const start = tileSet.values().next().value!;
+  const queue = [start];
+  visited.add(start);
+  while (queue.length > 0) {
+    const key = queue.shift()!;
+    const [col, row] = key.split(',').map(Number);
+    for (const [nc, nr] of [[col - 1, row], [col + 1, row], [col, row - 1], [col, row + 1]]) {
+      const nkey = `${nc},${nr}`;
+      if (tileSet.has(nkey) && !visited.has(nkey)) {
+        visited.add(nkey);
+        queue.push(nkey);
+      }
+    }
+  }
+  return visited.size === tileSet.size;
+}
+
 export function validatePlacement(
   board: BoardState,
   placements: Record<string, PlacedThisTurn>,
@@ -28,44 +49,31 @@ export function validatePlacement(
     return { valid: false, error: 'First word must cover the center star.' };
   }
 
-  // All tiles must be in the same row or column
-  const sameRow = positions.every(p => p.row === positions[0].row);
-  const sameCol = positions.every(p => p.col === positions[0].col);
-  if (!sameRow && !sameCol) {
-    return { valid: false, error: 'All tiles must be placed in the same row or column.' };
-  }
-
-  // No gaps allowed — every cell between first and last tile must be filled
-  if (sameRow) {
-    const r = positions[0].row;
-    const cols = positions.map(p => p.col).sort((a, b) => a - b);
-    for (let c = cols[0]; c <= cols[cols.length - 1]; c++) {
-      if (!board[r][c].tile) {
-        return { valid: false, error: 'Word must have no gaps between tiles.' };
-      }
-    }
-  } else {
-    const c = positions[0].col;
-    const rows = positions.map(p => p.row).sort((a, b) => a - b);
-    for (let r = rows[0]; r <= rows[rows.length - 1]; r++) {
-      if (!board[r][c].tile) {
-        return { valid: false, error: 'Word must have no gaps between tiles.' };
-      }
+  // Build the full tile set as it looks right now (board already contains placed tiles)
+  const tileSet = new Set<string>();
+  for (let r = 0; r < BOARD_HEIGHT; r++) {
+    for (let c = 0; c < BOARD_WIDTH; c++) {
+      if (board[r][c].tile) tileSet.add(`${c},${r}`);
     }
   }
 
-  // After the first turn, word must connect to tiles already on the board
+  // After first turn: at least one placed tile must touch a pre-existing tile
   if (!isFirstTurn) {
     const placementSet = new Set(keys);
-    const connected = positions.some(({ col, row }) =>
-      [[col - 1, row], [col + 1, row], [col, row - 1], [col, row + 1]].some(([nc, nr]) => {
-        if (nc < 0 || nr < 0 || nc >= BOARD_WIDTH || nr >= BOARD_HEIGHT) return false;
-        return board[nr][nc].tile !== null && !placementSet.has(`${nc},${nr}`);
-      })
-    );
-    if (!connected) {
+    const connectsToExisting = keys.some(key => {
+      const [col, row] = key.split(',').map(Number);
+      return [[col - 1, row], [col + 1, row], [col, row - 1], [col, row + 1]].some(([nc, nr]) => {
+        return tileSet.has(`${nc},${nr}`) && !placementSet.has(`${nc},${nr}`);
+      });
+    });
+    if (!connectsToExisting) {
       return { valid: false, error: 'Word must connect to tiles already on the board.' };
     }
+  }
+
+  // All tiles on the board must form one connected group — no isolated islands
+  if (!isConnected(tileSet)) {
+    return { valid: false, error: 'All tiles must be connected — no isolated words.' };
   }
 
   return { valid: true };

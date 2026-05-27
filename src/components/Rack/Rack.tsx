@@ -1,5 +1,5 @@
 import './Rack.css';
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
 import { createTileDragImage } from '../../utils/dragImage';
@@ -8,16 +8,17 @@ import type { DragData } from '../../store/gameStore';
 export function Rack() {
   const { getCurrentRack, currentPlayer, recallTile, recallAllTiles, moveRackTileToSlot, shuffleRack } = useGameStore();
   const slots = getCurrentRack();
-  const [draggingSlot, setDraggingSlot] = useState<number | null>(null);
-  const dragTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragRef = useRef<{ el: HTMLElement; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   function handleTileDragStart(e: React.DragEvent, tileId: string, slotIndex: number, letter: string) {
-    dragTimer.current = setTimeout(() => setDraggingSlot(slotIndex), 0);
+    const el = e.currentTarget as HTMLElement;
+    const timer = setTimeout(() => el.classList.add('tile-dragging'), 0);
+    dragRef.current = { el, timer };
+
     const data: DragData = { type: 'rack', tileId, slotIndex };
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
 
-    // Replace broken 3D ghost with a flat custom image
     const ghost = createTileDragImage(letter, currentPlayer);
     document.body.appendChild(ghost);
     e.dataTransfer.setDragImage(ghost, 25, 25);
@@ -25,8 +26,11 @@ export function Rack() {
   }
 
   function handleTileDragEnd() {
-    if (dragTimer.current !== null) clearTimeout(dragTimer.current);
-    setDraggingSlot(null);
+    if (dragRef.current) {
+      clearTimeout(dragRef.current.timer);
+      dragRef.current.el.classList.remove('tile-dragging');
+      dragRef.current = null;
+    }
   }
 
   function handleSlotDragOver(e: React.DragEvent) {
@@ -41,10 +45,8 @@ export function Rack() {
     const data = JSON.parse(raw) as DragData;
 
     if (data.type === 'rack') {
-      // Drag within rack — swap slots
       moveRackTileToSlot(data.tileId, data.slotIndex, toIndex);
     } else if (data.type === 'board') {
-      // Drag board tile back to rack slot — recall
       recallTile(data.col, data.row);
     }
   }
@@ -52,28 +54,27 @@ export function Rack() {
   return (
     <div className="rack-wrapper">
       <div className="rack-row">
-      <div className="rack">
-        {slots.map((slot, i) => (
-          <div
-            key={i}
-            className="rack-slot"
-            onDragOver={handleSlotDragOver}
-            onDrop={e => handleSlotDrop(e, i)}
-          >
-            {slot && (
-              <Tile
-                letter={slot.isWild ? '★' : slot.letter}
-                owner={currentPlayer}
-                draggable
-                isDragging={draggingSlot === i}
-                onDragStart={e => handleTileDragStart(e, slot.id, i, slot.isWild ? '★' : slot.letter)}
-                onDragEnd={handleTileDragEnd}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-      <button className="btn btn-icon" onClick={shuffleRack} title="Shuffle tiles">⇄</button>
+        <div className="rack">
+          {slots.map((slot, i) => (
+            <div
+              key={i}
+              className="rack-slot"
+              onDragOver={handleSlotDragOver}
+              onDrop={e => handleSlotDrop(e, i)}
+            >
+              {slot && (
+                <Tile
+                  letter={slot.isWild ? '★' : slot.letter}
+                  owner={currentPlayer}
+                  draggable
+                  onDragStart={e => handleTileDragStart(e, slot.id, i, slot.isWild ? '★' : slot.letter)}
+                  onDragEnd={handleTileDragEnd}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        <button className="btn btn-icon" onClick={shuffleRack} title="Shuffle tiles">⇄</button>
       </div>
       <div className="turn-controls">
         <button className="btn btn-secondary" onClick={recallAllTiles}>Reset Turn</button>

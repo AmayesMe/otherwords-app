@@ -1,5 +1,5 @@
 import './Cell.css';
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
 import { createTileDragImage } from '../../utils/dragImage';
@@ -19,8 +19,7 @@ const BONUS_CLASS: Record<number, string>  = { 1: 'bonus-1', 2: 'bonus-2', 3: 'b
 export function Cell({ state, col, row, isCenter }: CellProps) {
   const { tile, bonus, bonusUsed } = state;
   const { placeTile, moveTile, recallTile, isCurrentTurnTile, currentPlayer } = useGameStore();
-  const [isDraggingOut, setIsDraggingOut] = useState(false);
-  const dragTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragRef = useRef<{ el: HTMLElement; timer: ReturnType<typeof setTimeout> } | null>(null);
   const isThisTurn = isCurrentTurnTile(col, row);
   const showBonus = bonus && !tile && !bonusUsed;
   const showPip   = bonus && bonusUsed && tile;
@@ -51,7 +50,10 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
 
   function handleTileDragStart(e: React.DragEvent) {
     if (!isThisTurn) { e.preventDefault(); return; }
-    dragTimer.current = setTimeout(() => setIsDraggingOut(true), 0);
+    const el = e.currentTarget as HTMLElement;
+    const timer = setTimeout(() => el.classList.add('tile-dragging'), 0);
+    dragRef.current = { el, timer };
+
     const data: DragData = { type: 'board', col, row };
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
@@ -65,8 +67,11 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
   }
 
   function handleTileDragEnd() {
-    if (dragTimer.current !== null) clearTimeout(dragTimer.current);
-    setIsDraggingOut(false);
+    if (dragRef.current) {
+      clearTimeout(dragRef.current.timer);
+      dragRef.current.el.classList.remove('tile-dragging');
+      dragRef.current = null;
+    }
   }
 
   return (
@@ -84,7 +89,6 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
           owner={tile.owner}
           isNew={isThisTurn}
           draggable={isThisTurn}
-          isDragging={isDraggingOut}
           onDragStart={handleTileDragStart}
           onDragEnd={handleTileDragEnd}
           onClick={handleTileClick}

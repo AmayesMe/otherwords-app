@@ -24,8 +24,8 @@
   /* App chrome */
   --color-bg: #181818;
 
-  /* Tile sizing */
-  --tile-size:      clamp(36px, 4.6vw, 50px);
+  /* Tile sizing — constrained by both width and height so board always fits viewport */
+  --tile-size:      min(clamp(30px, 4.6vw, 50px), calc((100svh - 250px) / 13));
   --tile-thickness: 4px;
   --tile-radius:    3px;
   --cell-gap:       3px;
@@ -44,13 +44,14 @@ body {
   font-family: var(--font-sans);
   background-color: var(--color-bg);
   color: #FFFFFF;
-  min-height: 100vh;
+  height: 100svh;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
-  min-height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
 }

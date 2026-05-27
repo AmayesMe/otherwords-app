@@ -16,7 +16,7 @@ const BONUS_CLASS: Record<number, string>  = { 1: 'bonus-1', 2: 'bonus-2', 3: 'b
 
 export function Cell({ state, col, row, isCenter }: CellProps) {
   const { tile, bonus, bonusUsed } = state;
-  const { placeTile, moveTile, recallTile, isCurrentTurnTile, currentPlayer } = useGameStore();
+  const { moveTile, recallTile, isCurrentTurnTile, currentPlayer } = useGameStore();
   const isThisTurn = isCurrentTurnTile(col, row);
   const showBonus = bonus && !tile && !bonusUsed;
   const showPip   = bonus && bonusUsed && tile;

@@ -1,7 +1,9 @@
 import './Cell.css';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
+import { createTileDragImage } from '../../utils/dragImage';
 import type { CellState } from '../../game/types';
+import type { DragData } from '../../store/gameStore';
 
 interface CellProps {
   state: CellState;
@@ -15,7 +17,7 @@ const BONUS_CLASS: Record<number, string>  = { 1: 'bonus-1', 2: 'bonus-2', 3: 'b
 
 export function Cell({ state, col, row, isCenter }: CellProps) {
   const { tile, bonus, bonusUsed } = state;
-  const { placeTile, moveTile, recallTile, isCurrentTurnTile } = useGameStore();
+  const { placeTile, moveTile, recallTile, isCurrentTurnTile, currentPlayer } = useGameStore();
   const isThisTurn = isCurrentTurnTile(col, row);
   const showBonus = bonus && !tile && !bonusUsed;
   const showPip   = bonus && bonusUsed && tile;
@@ -29,14 +31,14 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
     e.preventDefault();
     const raw = e.dataTransfer.getData('text/plain');
     if (!raw) return;
-    const data = JSON.parse(raw) as
-      | { type: 'rack'; tileId: string }
-      | { type: 'board'; col: number; row: number };
+    const data = JSON.parse(raw) as DragData;
 
     if (data.type === 'rack') {
-      placeTile(data.tileId, col, row);
+      placeTile(data.tileId, data.slotIndex, col, row);
     } else if (data.type === 'board') {
-      moveTile(data.col, data.row, col, row);
+      if (data.col !== col || data.row !== row) {
+        moveTile(data.col, data.row, col, row);
+      }
     }
   }
 
@@ -46,8 +48,16 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
 
   function handleTileDragStart(e: React.DragEvent) {
     if (!isThisTurn) { e.preventDefault(); return; }
-    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'board', col, row }));
+    const data: DragData = { type: 'board', col, row };
+    e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
+
+    if (tile) {
+      const ghost = createTileDragImage(tile.letter, currentPlayer);
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost, 25, 25);
+      setTimeout(() => ghost.remove(), 0);
+    }
   }
 
   return (
@@ -55,8 +65,6 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
       className={['cell', showBonus && BONUS_CLASS[bonus!]].filter(Boolean).join(' ')}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      data-col={col}
-      data-row={row}
     >
       {!tile && isCenter && <span className="center-star">★</span>}
       {showBonus && <span className="bonus-label">{BONUS_LABELS[bonus!]}</span>}

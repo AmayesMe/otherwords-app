@@ -1,48 +1,64 @@
 import './Rack.css';
 import { Tile } from '../Tile/Tile';
 import { useGameStore } from '../../store/gameStore';
+import { createTileDragImage } from '../../utils/dragImage';
+import type { DragData } from '../../store/gameStore';
 
 export function Rack() {
-  const { getCurrentRack, currentPlayer, recallTile, recallAllTiles } = useGameStore();
-  const tiles = getCurrentRack();
+  const { getCurrentRack, currentPlayer, recallTile, recallAllTiles, moveRackTileToSlot } = useGameStore();
+  const slots = getCurrentRack();
 
-  function handleTileDragStart(e: React.DragEvent, tileId: string) {
-    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'rack', tileId }));
+  function handleTileDragStart(e: React.DragEvent, tileId: string, slotIndex: number, letter: string) {
+    const data: DragData = { type: 'rack', tileId, slotIndex };
+    e.dataTransfer.setData('text/plain', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
+
+    // Replace broken 3D ghost with a flat custom image
+    const ghost = createTileDragImage(letter, currentPlayer);
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 25, 25);
+    setTimeout(() => ghost.remove(), 0);
   }
 
-  // Dropping a board tile onto the rack recalls it
-  function handleRackDragOver(e: React.DragEvent) {
+  function handleSlotDragOver(e: React.DragEvent) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   }
 
-  function handleRackDrop(e: React.DragEvent) {
+  function handleSlotDrop(e: React.DragEvent, toIndex: number) {
     e.preventDefault();
     const raw = e.dataTransfer.getData('text/plain');
     if (!raw) return;
-    const data = JSON.parse(raw) as { type: string; col?: number; row?: number };
-    if (data.type === 'board' && data.col !== undefined && data.row !== undefined) {
+    const data = JSON.parse(raw) as DragData;
+
+    if (data.type === 'rack') {
+      // Drag within rack — swap slots
+      moveRackTileToSlot(data.tileId, data.slotIndex, toIndex);
+    } else if (data.type === 'board') {
+      // Drag board tile back to rack slot — recall
       recallTile(data.col, data.row);
     }
   }
 
   return (
     <div className="rack-wrapper">
-      <div className="rack" onDragOver={handleRackDragOver} onDrop={handleRackDrop}>
-        {tiles.map(tile => (
-          <div key={tile.id} className="rack-slot">
-            <Tile
-              letter={tile.isWild ? '★' : tile.letter}
-              owner={currentPlayer}
-              draggable
-              onDragStart={e => handleTileDragStart(e, tile.id)}
-            />
+      <div className="rack">
+        {slots.map((slot, i) => (
+          <div
+            key={i}
+            className="rack-slot"
+            onDragOver={handleSlotDragOver}
+            onDrop={e => handleSlotDrop(e, i)}
+          >
+            {slot && (
+              <Tile
+                letter={slot.isWild ? '★' : slot.letter}
+                owner={currentPlayer}
+                draggable
+                onDragStart={e => handleTileDragStart(e, slot.id, i, slot.isWild ? '★' : slot.letter)}
+              />
+            )}
           </div>
-        ))}
-        {/* Empty slots to fill rack up to 7 */}
-        {Array.from({ length: Math.max(0, 7 - tiles.length) }).map((_, i) => (
-          <div key={`empty-${i}`} className="rack-slot rack-slot-empty" />
         ))}
       </div>
       <div className="turn-controls">

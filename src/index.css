@@ -24,8 +24,10 @@
   /* App chrome */
   --color-bg: #181818;
 
-  /* Tile sizing — constrained by both width and height so board always fits viewport */
-  --tile-size:      min(clamp(30px, 4.6vw, 50px), calc((100dvh - 250px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 13));
+  /* Tile sizing — constrained by both width and height so board always fits viewport.
+     Divides by 14: 13 board rows + 1 rack row (both tile-size tall).
+     270px covers score bar, buttons, padding, gaps, and safe-area buffer. */
+  --tile-size:      min(clamp(28px, 4.6vw, 50px), calc((100dvh - 270px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 14));
   --tile-thickness: 4px;
   --tile-radius:    3px;
   --cell-gap:       3px;

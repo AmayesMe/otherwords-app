@@ -9,32 +9,47 @@ type Mode = 'menu' | 'creating' | 'waiting' | 'joining';
 
 type GameStatusKind = 'loading' | 'your-turn' | 'their-turn' | 'waiting' | 'not-found';
 
+interface GameInfo {
+  kind: GameStatusKind;
+  myScore: number;
+  theirScore: number;
+  opponentName: string;
+  turnCount: number;
+}
+
 function statusLabel(kind: GameStatusKind): string {
   switch (kind) {
     case 'loading':    return '…';
     case 'your-turn':  return 'Your turn';
     case 'their-turn': return 'Their turn';
     case 'waiting':    return 'Waiting for opponent';
-    case 'not-found':  return 'Not found';
+    case 'not-found':  return 'Game not found';
   }
 }
 
 function statusClass(kind: GameStatusKind): string {
-  const base = 'lobby-game-status';
+  const b = 'lobby-game-status';
   switch (kind) {
-    case 'your-turn':  return `${base} lobby-game-status-yours`;
-    case 'their-turn': return `${base} lobby-game-status-theirs`;
-    case 'waiting':    return `${base} lobby-game-status-waiting`;
-    case 'not-found':  return `${base} lobby-game-status-error`;
-    default:           return `${base} lobby-game-status-theirs`;
+    case 'your-turn':  return `${b} lobby-game-status-yours`;
+    case 'their-turn': return `${b} lobby-game-status-theirs`;
+    case 'waiting':    return `${b} lobby-game-status-waiting`;
+    case 'not-found':  return `${b} lobby-game-status-error`;
+    default:           return `${b} lobby-game-status-theirs`;
   }
 }
 
-async function fetchStatus(game: SavedGame): Promise<GameStatusKind> {
+async function fetchGameInfo(game: SavedGame): Promise<GameInfo> {
   const data = await getGame(game.gameId);
-  if (!data) return 'not-found';
-  if (!data.player2_joined) return 'waiting';
-  return data.state.currentPlayer === game.role ? 'your-turn' : 'their-turn';
+  if (!data) return { kind: 'not-found', myScore: 0, theirScore: 0, opponentName: '', turnCount: 0 };
+  const isP1 = game.role === 'player1';
+  const myScore    = isP1 ? data.state.player1Score : data.state.player2Score;
+  const theirScore = isP1 ? data.state.player2Score : data.state.player1Score;
+  const opponentName = isP1 ? (data.state.player2Name ?? '') : (data.state.player1Name ?? '');
+  let kind: GameStatusKind;
+  if (!data.player2_joined) kind = 'waiting';
+  else if (data.state.currentPlayer === game.role) kind = 'your-turn';
+  else kind = 'their-turn';
+  return { kind, myScore, theirScore, opponentName, turnCount: data.state.turnCount };
 }
 
 export function Lobby() {
@@ -44,7 +59,10 @@ export function Lobby() {
     joinOnlineGame,
     resumeGame,
     removeSavedGame,
+    setPlayerName,
+    startPlayingNow,
     savedGames,
+    myName,
     isWaitingForOpponent,
     gameId: storeGameId,
   } = useGameStore();
@@ -55,7 +73,7 @@ export function Lobby() {
   const [isLoading, setIsLoading] = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [statuses, setStatuses] = useState<Record<string, GameStatusKind>>({});
+  const [gameInfos, setGameInfos] = useState<Record<string, GameInfo>>({});
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -64,19 +82,23 @@ export function Lobby() {
     if (mode === 'joining') inputRef.current?.focus();
   }, [mode]);
 
-  // Fetch game statuses whenever the menu is shown or the list changes
+  // Fetch statuses + scores whenever the menu is shown
   useEffect(() => {
     if (mode !== 'menu' || savedGames.length === 0) return;
-    setStatuses(Object.fromEntries(savedGames.map(g => [g.gameId, 'loading' as GameStatusKind])));
+    setGameInfos(
+      Object.fromEntries(
+        savedGames.map(g => [g.gameId, { kind: 'loading' as GameStatusKind, myScore: 0, theirScore: 0, opponentName: '', turnCount: 0 }])
+      )
+    );
     savedGames.forEach(game => {
-      fetchStatus(game).then(kind => {
-        setStatuses(prev => ({ ...prev, [game.gameId]: kind }));
+      fetchGameInfo(game).then(info => {
+        setGameInfos(prev => ({ ...prev, [game.gameId]: info }));
       });
     });
   }, [mode, savedGames]);
 
-  // If the store enters waiting-for-opponent while on lobby (e.g. after resuming a
-  // game that's still open), switch to the waiting screen automatically.
+  // If store enters waiting-for-opponent (e.g. after resuming an unstarted game),
+  // switch to the waiting screen automatically.
   useEffect(() => {
     if (isWaitingForOpponent && storeGameId && mode !== 'waiting') {
       setGameCode(storeGameId);
@@ -122,11 +144,11 @@ export function Lobby() {
     setError(null);
     try {
       await resumeGame(game.gameId, game.role as Player);
-      // If game is active → screen becomes 'playing' and Lobby unmounts.
-      // If still waiting → isWaitingForOpponent effect above fires, sets mode 'waiting'.
+      // Active game → screen becomes 'playing', Lobby unmounts.
+      // Unstarted game → isWaitingForOpponent effect fires, sets mode 'waiting'.
     } catch (e) {
       setError((e as Error).message ?? 'Could not resume game.');
-      setStatuses(prev => ({ ...prev, [game.gameId]: 'not-found' }));
+      setGameInfos(prev => ({ ...prev, [game.gameId]: { ...prev[game.gameId], kind: 'not-found' } }));
     } finally {
       setResumingId(null);
     }
@@ -141,33 +163,67 @@ export function Lobby() {
         {mode === 'menu' && (
           <div className="lobby-section">
 
-            {/* Active games list — only shown when the device has games */}
+            {/* Name field */}
+            <div className="lobby-name-field">
+              <input
+                className="lobby-name-input"
+                value={myName}
+                onChange={e => setPlayerName(e.target.value)}
+                placeholder="Your name"
+                maxLength={15}
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </div>
+
+            {/* Active games */}
             {savedGames.length > 0 && (
               <>
                 <p className="lobby-games-header">Your games</p>
                 <div className="lobby-games-list">
                   {savedGames.map(game => {
-                    const kind: GameStatusKind = statuses[game.gameId] ?? 'loading';
+                    const info = gameInfos[game.gameId];
+                    const kind: GameStatusKind = info?.kind ?? 'loading';
                     const isResuming = resumingId === game.gameId;
+                    const showScore  = info && info.turnCount > 0 && kind !== 'not-found';
+                    const showVs     = info?.opponentName;
                     return (
                       <div key={game.gameId} className="lobby-game-row">
-                        <span className="lobby-game-id">{game.gameId}</span>
-                        <span className={statusClass(kind)}>{statusLabel(kind)}</span>
-                        <button
-                          className="lobby-game-resume"
-                          onClick={() => handleResume(game)}
-                          disabled={isResuming || kind === 'not-found'}
-                        >
-                          {isResuming ? '…' : 'Resume'}
-                        </button>
-                        <button
-                          className="lobby-game-remove"
-                          onClick={() => removeSavedGame(game.gameId)}
-                          title="Remove from list"
-                          aria-label="Remove game"
-                        >
-                          ×
-                        </button>
+                        <div className="lobby-game-left">
+                          <span className="lobby-game-id">{game.gameId}</span>
+                          <div className="lobby-game-sub">
+                            <span className={statusClass(kind)}>{statusLabel(kind)}</span>
+                            {showScore && (
+                              <>
+                                <span className="lobby-game-sep">·</span>
+                                <span className="lobby-game-score">{info.myScore}–{info.theirScore}</span>
+                              </>
+                            )}
+                            {showVs && (
+                              <>
+                                <span className="lobby-game-sep">·</span>
+                                <span className="lobby-game-vs">vs {info.opponentName}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="lobby-game-actions">
+                          <button
+                            className="lobby-game-resume"
+                            onClick={() => handleResume(game)}
+                            disabled={isResuming || kind === 'not-found'}
+                          >
+                            {isResuming ? '…' : 'Resume'}
+                          </button>
+                          <button
+                            className="lobby-game-remove"
+                            onClick={() => removeSavedGame(game.gameId)}
+                            title="Remove from list"
+                            aria-label="Remove"
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -204,10 +260,20 @@ export function Lobby() {
           <div className="lobby-section lobby-centered">
             <p className="lobby-hint">Share this code with your opponent</p>
             <div className="lobby-code">{gameCode}</div>
-            {isWaitingForOpponent
-              ? <p className="lobby-hint">Waiting for opponent to join…</p>
-              : <p className="lobby-hint lobby-hint-success">Opponent joined! Starting…</p>
-            }
+            {isWaitingForOpponent ? (
+              <>
+                <p className="lobby-hint">Waiting for opponent to join…</p>
+                <button
+                  className="lobby-btn lobby-btn-primary"
+                  onClick={startPlayingNow}
+                >
+                  Start Playing
+                </button>
+                <p className="lobby-hint-sm">Your opponent can still join using the code above</p>
+              </>
+            ) : (
+              <p className="lobby-hint lobby-hint-success">Opponent joined! Starting…</p>
+            )}
             <button
               className="lobby-btn lobby-btn-ghost lobby-btn-sm"
               onClick={() => useGameStore.getState().resetToLobby()}

@@ -35,6 +35,8 @@ export interface SyncState {
   currentPlayer: Player;
   tileBag: string[];
   turnCount: number;
+  player1Name?: string;
+  player2Name?: string;
 }
 
 interface GameStore {
@@ -55,6 +57,9 @@ interface GameStore {
   screen: 'lobby' | 'playing';
   gameId: string | null;        // null = local (pass-and-play)
   myRole: Player | null;        // null = local (you are both players)
+  myName: string;               // this device's player name (persisted)
+  player1Name: string;
+  player2Name: string;
   isWaitingForOpponent: boolean;
   syncError: string | null;
   savedGames: SavedGame[];      // games this device has created or joined
@@ -77,6 +82,8 @@ interface GameStore {
   joinOnlineGame: (code: string) => Promise<void>;
   resumeGame: (gameId: string, role: Player) => Promise<void>;
   removeSavedGame: (gameId: string) => void;
+  setPlayerName: (name: string) => void;
+  startPlayingNow: () => void;
   applyRemoteRow: (row: { state: SyncState; player2_joined: boolean }) => void;
   resetToLobby: () => void;
 
@@ -163,6 +170,8 @@ function extractSyncState(s: GameStore): SyncState {
     currentPlayer: s.currentPlayer,
     tileBag: s.tileBag,
     turnCount: s.turnCount,
+    player1Name: s.player1Name,
+    player2Name: s.player2Name,
   };
 }
 
@@ -176,6 +185,8 @@ function applySyncState(sync: SyncState): Partial<GameStore> {
     currentPlayer: sync.currentPlayer,
     tileBag: sync.tileBag,
     turnCount: sync.turnCount,
+    player1Name: sync.player1Name ?? '',
+    player2Name: sync.player2Name ?? '',
     currentTurnPlacements: {},
     turnError: null,
     pendingWildAssignment: null,
@@ -185,6 +196,7 @@ function applySyncState(sync: SyncState): Partial<GameStore> {
 // ─── Saved-games persistence ─────────────────────────────────────────────────
 
 const SAVED_KEY = 'ow_games';
+const NAME_KEY  = 'ow_player_name';
 
 function loadSavedGames(): SavedGame[] {
   try {
@@ -252,6 +264,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   screen: 'lobby',
   gameId: null,
   myRole: null,
+  myName: localStorage.getItem(NAME_KEY) ?? '',
+  player1Name: '',
+  player2Name: '',
   isWaitingForOpponent: false,
   syncError: null,
   savedGames: loadSavedGames(),
@@ -547,7 +562,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   async createOnlineGame() {
     const fresh = freshGameState();
-    const syncState: SyncState = { ...fresh };
+    const syncState: SyncState = { ...fresh, player1Name: get().myName };
 
     const gameId = await createGame(syncState);
 
@@ -573,7 +588,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   async joinOnlineGame(code: string) {
-    const syncState = await joinGame(code);
+    const syncState = await joinGame(code, get().myName);
     const gameId = code.toUpperCase().trim();
 
     set({
@@ -624,6 +639,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newSaved = get().savedGames.filter(g => g.gameId !== gameId);
     set({ savedGames: newSaved });
     persistSavedGames(newSaved);
+  },
+
+  setPlayerName(name) {
+    localStorage.setItem(NAME_KEY, name);
+    set({ myName: name });
+  },
+
+  startPlayingNow() {
+    set({ screen: 'playing' });
   },
 
   applyRemoteRow(row) {

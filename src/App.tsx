@@ -69,6 +69,9 @@ export default function App() {
     currentTurnPlacements,
     myRole,
     gameId,
+    player1Name,
+    player2Name,
+    isWaitingForOpponent,
     isMyTurn,
     syncError,
     resetToLobby,
@@ -91,9 +94,11 @@ export default function App() {
   // Show lobby when screen === 'lobby'
   if (screen === 'lobby') return <Lobby />;
 
-  // In online games, show "You" / "Opponent" instead of "Player 1" / "Player 2"
-  const p1Label = gameId ? (myRole === 'player1' ? 'You' : 'Opponent') : 'Player 1';
-  const p2Label = gameId ? (myRole === 'player2' ? 'You' : 'Opponent') : 'Player 2';
+  // Score bar labels: real names when available, otherwise context-aware fallbacks
+  const p1Fallback = gameId ? (myRole === 'player1' ? 'You' : 'Opponent') : 'Player 1';
+  const p2Fallback = gameId ? (myRole === 'player2' ? 'You' : 'Opponent') : 'Player 2';
+  const p1Label = player1Name || p1Fallback;
+  const p2Label = player2Name || p2Fallback;
   const myTurn = isMyTurn();
 
   return (
@@ -117,8 +122,13 @@ export default function App() {
         />
       </header>
 
-      {/* Shown in online games when waiting for the opponent to move */}
-      {gameId && !myTurn && (
+      {/* Waiting banners */}
+      {gameId && isWaitingForOpponent && (
+        <div className="waiting-banner">
+          Waiting for opponent — code: <strong>{gameId}</strong>
+        </div>
+      )}
+      {gameId && !isWaitingForOpponent && !myTurn && (
         <div className="waiting-banner">Waiting for opponent…</div>
       )}
 

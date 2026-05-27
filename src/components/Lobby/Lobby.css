@@ -149,6 +149,41 @@
   margin: 4px 0;
 }
 
+/* ── Name field ─────────────────────────────────────────────────────────── */
+
+.lobby-name-field {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.lobby-name-input {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 2px;
+  text-align: center;
+  outline: none;
+  width: 180px;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.lobby-name-input:focus {
+  color: rgba(255, 255, 255, 0.8);
+  border-bottom-color: rgba(255, 255, 255, 0.28);
+}
+
+.lobby-name-input::placeholder {
+  color: rgba(255, 255, 255, 0.18);
+  font-weight: 500;
+}
+
 /* ── Game list ──────────────────────────────────────────────────────────── */
 
 .lobby-games-header {
@@ -179,17 +214,31 @@
   padding: 10px 12px;
 }
 
+/* Left column: code + sub-line */
+.lobby-game-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
 .lobby-game-id {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.1em;
   color: rgba(255, 255, 255, 0.8);
-  flex: 0 0 auto;
+}
+
+.lobby-game-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
 }
 
 .lobby-game-status {
-  flex: 1;
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
@@ -208,6 +257,27 @@
   .lobby-game-status-waiting { animation: none; }
 }
 
+.lobby-game-sep {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.18);
+}
+
+.lobby-game-score,
+.lobby-game-vs {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+/* Right column: buttons */
+.lobby-game-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .lobby-game-resume {
   font-family: var(--font-sans);
   font-size: 11px;
@@ -220,7 +290,6 @@
   border-radius: 4px;
   padding: 5px 10px;
   cursor: pointer;
-  flex: 0 0 auto;
   transition: background 150ms ease, opacity 150ms ease;
 }
 
@@ -235,7 +304,6 @@
   border: none;
   cursor: pointer;
   padding: 0 2px;
-  flex: 0 0 auto;
   transition: color 150ms ease;
 }
 
@@ -246,6 +314,16 @@
   height: 1px;
   background: rgba(255, 255, 255, 0.07);
   margin-bottom: 16px;
+}
+
+/* Small hint under Start Playing */
+.lobby-hint-sm {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.25);
+  text-align: center;
+  letter-spacing: 0.01em;
 }
 
 /* Loading spinner */

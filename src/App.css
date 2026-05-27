@@ -61,6 +61,9 @@
   color: rgba(255, 255, 255, 0.35);
   transition: color 200ms ease;
   white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   /* Visually top-align with the tile face, not the 3-D edge */
   padding-top: 3px;
 }

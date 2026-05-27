@@ -51,8 +51,8 @@ export async function createGame(initialState: SyncState): Promise<string> {
   throw new Error('Failed to create game. Please try again.');
 }
 
-/** Join an existing game by code. Returns the current game state. */
-export async function joinGame(code: string): Promise<SyncState> {
+/** Join an existing game by code. Returns the updated game state (with player2Name set). */
+export async function joinGame(code: string, player2Name: string): Promise<SyncState> {
   const id = code.toUpperCase().trim();
 
   const { data, error } = await supabase
@@ -65,14 +65,16 @@ export async function joinGame(code: string): Promise<SyncState> {
   if (!data.player1_joined) throw new Error('Game is not ready yet.');
   if (data.player2_joined) throw new Error('This game already has two players.');
 
+  const updatedState: SyncState = { ...(data.state as SyncState), player2Name };
+
   const { error: joinErr } = await supabase
     .from('games')
-    .update({ player2_joined: true })
+    .update({ player2_joined: true, state: updatedState })
     .eq('id', id);
 
   if (joinErr) throw new Error('Failed to join. Please try again.');
 
-  return data.state as SyncState;
+  return updatedState;
 }
 
 /** Push committed game state after a turn ends. */

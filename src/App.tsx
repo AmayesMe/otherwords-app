@@ -1,5 +1,5 @@
 import './App.css';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Board } from './components/Board/Board';
 import { Rack } from './components/Rack/Rack';
 import { LetterPicker } from './components/LetterPicker/LetterPicker';
@@ -20,19 +20,88 @@ function scoreDigits(n: number): string[] {
   return [String(Math.floor(s / 10)), String(s % 10)];
 }
 
+// ms: halfway point when digit content swaps (tile is edge-on / invisible)
+const SCORE_FOLD_HALF  = 50;
+// ms: full fold cycle + small gap before the next digit steps
+const SCORE_FOLD_TOTAL = 115;
+
+/** Which left-to-right digit indices visually change when score steps from→to. */
+function getFlippingIndices(from: number, to: number): Set<number> {
+  const a = scoreDigits(from);
+  const b = scoreDigits(to);
+  const result = new Set<number>();
+  if (a.length !== b.length) {
+    // All digits change when the digit count changes (e.g. 99 → 100)
+    for (let i = 0; i < b.length; i++) result.add(i);
+  } else {
+    for (let i = 0; i < b.length; i++) {
+      if (a[i] !== b[i]) result.add(i);
+    }
+  }
+  return result;
+}
+
 interface DigitColProps {
   score: number;
   projected: number | null;
   owner: Player;
 }
 
-function DigitCol({ score, projected, owner }: DigitColProps) {
-  const actual = scoreDigits(score);
+/**
+ * Animated score column: counts up/down one digit at a time toward the target
+ * score, flipping each changing digit tile like a physical split-flap display.
+ */
+function AnimatedDigitCol({ score, projected, owner }: DigitColProps) {
+  const [displayed, setDisplayed] = useState(score);
+  const [flipping,  setFlipping]  = useState<Set<number>>(new Set());
+
+  const displayedRef = useRef(score);
+  const targetRef    = useRef(score);
+  const animatingRef = useRef(false);
+  const timersRef    = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Update target whenever score prop changes; kick off animation if idle
+  useEffect(() => {
+    targetRef.current = score;
+    if (!animatingRef.current) tick();
+  }, [score]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cancel all pending timers on unmount
+  useEffect(() => () => { timersRef.current.forEach(clearTimeout); }, []);
+
+  function tick() {
+    const current = displayedRef.current;
+    const target  = targetRef.current;
+    if (current === target) { animatingRef.current = false; return; }
+
+    animatingRef.current = true;
+    const next = current < target ? current + 1 : current - 1;
+    setFlipping(getFlippingIndices(current, next));
+
+    // Mid-flip: tile is edge-on — swap digit content invisibly
+    const t1 = setTimeout(() => {
+      displayedRef.current = next;
+      setDisplayed(next);
+    }, SCORE_FOLD_HALF);
+
+    // End of fold: clear animation class, then step again if needed
+    const t2 = setTimeout(() => {
+      setFlipping(new Set());
+      tick();
+    }, SCORE_FOLD_TOTAL);
+
+    timersRef.current.push(t1, t2);
+  }
+
+  const actual = scoreDigits(displayed);
   const proj   = scoreDigits(projected ?? 0);
+
   return (
     <div className="score-digit-col">
       <div className="score-digits">
-        {actual.map((d, i) => <Tile key={`a${i}`} letter={d} owner={owner} />)}
+        {actual.map((d, i) => (
+          <Tile key={`a${i}`} letter={d} owner={owner} isScoreFlipping={flipping.has(i)} />
+        ))}
       </div>
       <div
         className="score-digits score-digits-proj"
@@ -111,13 +180,13 @@ export default function App() {
           {p1Label}
         </span>
 
-        <DigitCol
+        <AnimatedDigitCol
           score={displayP1Score}
           projected={watching ? null : (projectedScore?.player1 ?? null)}
           owner="player1"
         />
 
-        <DigitCol
+        <AnimatedDigitCol
           score={displayP2Score}
           projected={watching ? null : (projectedScore?.player2 ?? null)}
           owner="player2"
@@ -128,14 +197,21 @@ export default function App() {
         </span>
       </header>
 
-      {/* Waiting banners */}
-      {gameId && isWaitingForOpponent && (
-        <div className="waiting-banner">
-          Waiting for opponent — code: <strong>{gameId}</strong>
+      {/* Turn-status banner — always rendered when online so layout never shifts.
+          Hidden during opponent-banner / replay-overlay; otherwise shows
+          "Waiting for opponent", "Your turn", or the join-code message. */}
+      {gameId && (
+        <div
+          className="waiting-banner"
+          style={{ visibility: (replayMode === 'banner' || replayMode === 'watching') ? 'hidden' : 'visible' }}
+        >
+          {isWaitingForOpponent
+            ? <>Waiting for opponent — code: <strong>{gameId}</strong></>
+            : myTurn
+            ? 'Your turn'
+            : 'Waiting for opponent…'
+          }
         </div>
-      )}
-      {gameId && !isWaitingForOpponent && !myTurn && replayMode !== 'banner' && (
-        <div className="waiting-banner">Waiting for opponent…</div>
       )}
 
       {/* Opponent played banner — shown when they move while game screen is open */}

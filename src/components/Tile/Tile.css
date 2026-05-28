@@ -37,6 +37,19 @@
   transform: rotateX(180deg);
 }
 
+/* Score digit fold: folds to edge-on, digit updates at midpoint, then unfolds */
+@keyframes score-fold {
+  0%   { transform: rotateX(0deg); }
+  45%  { transform: rotateX(-90deg); }
+  55%  { transform: rotateX(-90deg); }
+  100% { transform: rotateX(0deg); }
+}
+
+.tile-inner.tile-score-flipping {
+  animation: score-fold 100ms ease-in-out both;
+  transition: none; /* suppress the base transform transition while animating */
+}
+
 .tile-new .tile-inner {
   transform: translateY(-2px);
 }
@@ -122,4 +135,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tile-inner { transition: none; }
+  .tile-inner.tile-score-flipping { animation: none; }
 }

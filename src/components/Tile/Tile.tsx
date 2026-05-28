@@ -6,6 +6,7 @@ interface TileProps {
   owner: Player;
   isWild?: boolean;
   isFlipping?: boolean;
+  isScoreFlipping?: boolean;
   isNew?: boolean;
   bonusValue?: BonusValue | null;
   onPointerDown?: (e: React.PointerEvent) => void;
@@ -17,7 +18,7 @@ interface TileProps {
 }
 
 export function Tile({
-  letter, owner, isWild = false, isFlipping = false, isNew = false,
+  letter, owner, isWild = false, isFlipping = false, isScoreFlipping = false, isNew = false,
   onPointerDown, onPointerMove, onPointerUp, onPointerCancel,
   onClick, className = '',
 }: TileProps) {
@@ -33,7 +34,7 @@ export function Tile({
       onClick={onClick}
       style={{ cursor: isDraggable ? 'grab' : onClick ? 'pointer' : 'default' }}
     >
-      <div className={`tile-inner${isFlipping ? ' tile-flipping' : ''}`}>
+      <div className={`tile-inner${isFlipping ? ' tile-flipping' : ''}${isScoreFlipping ? ' tile-score-flipping' : ''}`}>
         <div className={`tile-face tile-front ${isP1 ? 'tile-p1' : 'tile-p2'}`}>
           {/* Assigned wild: show letter dimmed. Unassigned wild: show centre dot only. */}
           {isWild && letter

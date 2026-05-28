@@ -1,34 +1,38 @@
 import './TurnReplayOverlay.css';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Tile } from '../Tile/Tile';
-import { isCenterCell } from '../../game/boardUtils';
+import { isCenterCell, countScore } from '../../game/boardUtils';
+import { useGameStore } from '../../store/gameStore';
 import type { TurnReplay } from '../../store/gameStore';
 import type { BoardState, CellState } from '../../game/types';
 
 const BONUS_LABELS: Record<number, string> = { 1: '+1', 2: '+2', 3: '+3' };
 const BONUS_CLASS: Record<number, string>  = { 1: 'bonus-1', 2: 'bonus-2', 3: 'bonus-3' };
 
-const TILE_INTERVAL     = 290;   // ms between each tile reveal
-const PAUSE_AFTER_PLACE = 650;   // ms pause before confiscation flips begin
-const FLIP_DURATION     = 480;   // ms for the 3-D flip to complete (matches CSS 400ms + buffer)
-const DONE_DELAY        = 400;   // ms pause after flips before showing completion buttons
+const INITIAL_DELAY      = 350;  // ms before first tile appears (overlay slide-in is 220ms)
+const TILE_INTERVAL      = 290;  // ms between consecutive tile placements
+const PAUSE_AFTER_PLACE  = 700;  // ms pause before flips start
+const FLIP_STAGGER       = 220;  // ms between each flip start (tiles overlap slightly)
+const FLIP_CSS_DURATION  = 400;  // must match CSS transition on .tile-inner
+const FLIP_BUFFER        = 80;   // extra buffer after flip animation
+const DONE_DELAY         = 350;  // ms after last flip settles before showing completion buttons
 
 interface Props {
   replay: TurnReplay;
   opponentName: string;
-  /** Called when the player is done watching and wants to proceed to their turn. */
+  /** Called when player is done and ready to take their turn. */
   onDone: () => void;
 }
 
 export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
-  // Incrementing this re-runs the animation (for "Watch again")
-  const [animKey, setAnimKey]         = useState(0);
-  const [revealedCount, setRevealedCount] = useState(0);
-  const [isFlippingPhase, setIsFlippingPhase] = useState(false);
-  const [animDone, setAnimDone]       = useState(false);
+  const setReplayScore = useGameStore(state => state.setReplayScore);
 
-  const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
+  // Incrementing this key re-runs the entire animation ("Watch again")
+  const [animKey, setAnimKey]           = useState(0);
+  const [revealedCount, setRevealedCount] = useState(0);
+  const [flippedCount, setFlippedCount] = useState(0);   // how many flips have STARTED
+  const [scoredCount, setScoredCount]   = useState(0);   // how many flips have FINISHED (for score)
+  const [animDone, setAnimDone]         = useState(false);
 
   // Sort placements reading-order (top-left → bottom-right)
   const sortedPlacements = useMemo(
@@ -36,46 +40,69 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
     [replay.placements],
   );
 
-  // Keys currently in the 3-D flip phase
-  const flippingSet = useMemo(
-    () => isFlippingPhase
-      ? new Set(replay.confiscated.map(c => `${c.col},${c.row}`))
-      : new Set<string>(),
-    [isFlippingPhase, replay.confiscated],
+  // Sort confiscated cells reading-order — one flips at a time, staggered
+  const sortedConfiscated = useMemo(
+    () => [...replay.confiscated].sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col),
+    [replay.confiscated],
   );
 
-  // Keys that have been placed so far (for the isNew lift effect)
+  // Which cells are currently mid-flip (CSS animation in progress)
+  const flippingSet = useMemo(() => {
+    const s = new Set<string>();
+    for (let i = 0; i < flippedCount; i++) s.add(`${sortedConfiscated[i].col},${sortedConfiscated[i].row}`);
+    return s;
+  }, [flippedCount, sortedConfiscated]);
+
+  // Which placements have been revealed so far
   const revealedKeys = useMemo(() => {
     const s = new Set<string>();
     for (let i = 0; i < revealedCount; i++) s.add(`${sortedPlacements[i].col},${sortedPlacements[i].row}`);
     return s;
   }, [revealedCount, sortedPlacements]);
 
-  // Drive the animation — re-runs on "Watch again" (animKey bump)
+  // Drive the full animation sequence — re-runs when animKey increments
   useEffect(() => {
+    // Reset all animation state at the start of each run
     setRevealedCount(0);
-    setIsFlippingPhase(false);
+    setFlippedCount(0);
+    setScoredCount(0);
     setAnimDone(false);
 
     const timers: ReturnType<typeof setTimeout>[] = [];
 
+    // ── 1. Reveal placements one by one ──────────────────────────────────────
     sortedPlacements.forEach((_, i) => {
-      timers.push(setTimeout(() => setRevealedCount(i + 1), i * TILE_INTERVAL));
+      timers.push(setTimeout(() => setRevealedCount(i + 1), INITIAL_DELAY + i * TILE_INTERVAL));
     });
 
-    const afterPlacements = Math.max(sortedPlacements.length, 1) * TILE_INTERVAL + PAUSE_AFTER_PLACE;
+    const afterPlacements =
+      INITIAL_DELAY + Math.max(sortedPlacements.length, 1) * TILE_INTERVAL + PAUSE_AFTER_PLACE;
 
-    if (replay.confiscated.length > 0) {
-      timers.push(setTimeout(() => setIsFlippingPhase(true), afterPlacements));
-      timers.push(setTimeout(() => setAnimDone(true), afterPlacements + FLIP_DURATION + DONE_DELAY));
+    // ── 2. Staggered one-at-a-time flips ─────────────────────────────────────
+    if (sortedConfiscated.length > 0) {
+      sortedConfiscated.forEach((_, i) => {
+        const flipStart = afterPlacements + i * FLIP_STAGGER;
+        const flipEnd   = flipStart + FLIP_CSS_DURATION + FLIP_BUFFER;
+
+        // Start the CSS flip animation
+        timers.push(setTimeout(() => setFlippedCount(i + 1), flipStart));
+        // Update the score once this tile's flip has settled
+        timers.push(setTimeout(() => setScoredCount(i + 1), flipEnd));
+      });
+
+      const lastFlipEnd =
+        afterPlacements +
+        (sortedConfiscated.length - 1) * FLIP_STAGGER +
+        FLIP_CSS_DURATION + FLIP_BUFFER;
+      timers.push(setTimeout(() => setAnimDone(true), lastFlipEnd + DONE_DELAY));
     } else {
       timers.push(setTimeout(() => setAnimDone(true), afterPlacements));
     }
 
     return () => timers.forEach(clearTimeout);
-  }, [animKey]); // eslint-disable-line react-hooks/exhaustive-deps — intentionally animKey-only
+  }, [animKey]); // eslint-disable-line react-hooks/exhaustive-deps — mount-only per key
 
-  // Build the display board: boardBefore + revealed placements
+  // ── Display board: boardBefore + revealed placements ─────────────────────────
   const displayBoard = useMemo((): BoardState =>
     replay.boardBefore.map((row, rowIndex) =>
       row.map((cell, colIndex): CellState => {
@@ -91,17 +118,35 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
     [revealedKeys, sortedPlacements, replay],
   );
 
-  function handleWatchAgain() {
-    setAnimKey(k => k + 1);
-  }
+  // ── Scoring board: displayBoard + ownership for completed flips ──────────────
+  // scoredCount tracks flips that have finished animating so the score "ticks over"
+  // at the moment the tile settles to its new colour, not when the flip starts.
+  const scoringBoard = useMemo((): BoardState => {
+    const b = displayBoard.map(r => r.map(c => ({ ...c })));
+    for (let i = 0; i < scoredCount; i++) {
+      const { col, row } = sortedConfiscated[i];
+      if (b[row][col].tile) {
+        b[row][col] = { ...b[row][col], tile: { ...b[row][col].tile!, owner: replay.player } };
+      }
+    }
+    return b;
+  }, [displayBoard, scoredCount, sortedConfiscated, replay.player]);
+
+  // Push live score into the store so the score bar updates during animation
+  useEffect(() => {
+    setReplayScore(countScore(scoringBoard));
+  }, [scoringBoard]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear score from store when overlay unmounts
+  useEffect(() => () => { setReplayScore(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="replay-overlay">
-      {/* Header — label always visible; Skip only shown while animating */}
+      {/* Header */}
       <div className="replay-header">
         <span className="replay-header-label">{opponentName}&rsquo;s play</span>
         {!animDone && (
-          <button className="replay-skip-btn" onClick={() => onDoneRef.current()}>Skip</button>
+          <button className="replay-skip-btn" onClick={onDone}>Skip</button>
         )}
       </div>
 
@@ -145,13 +190,16 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
         )}
       </div>
 
-      {/* Completion row — shown after animation finishes */}
+      {/* Completion buttons — shown after animation finishes */}
       {animDone && (
         <div className="replay-done-row">
-          <button className="replay-done-btn replay-done-secondary" onClick={handleWatchAgain}>
+          <button
+            className="replay-done-btn replay-done-secondary"
+            onClick={() => setAnimKey(k => k + 1)}
+          >
             Watch again
           </button>
-          <button className="replay-done-btn replay-done-primary" onClick={() => onDoneRef.current()}>
+          <button className="replay-done-btn replay-done-primary" onClick={onDone}>
             Play
           </button>
         </div>

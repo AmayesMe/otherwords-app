@@ -65,6 +65,7 @@ export default function App() {
     replayMode,
     watchReplay,
     dismissReplay,
+    replayScore,
   } = useGameStore();
 
   const projectedScore = useMemo(() => {
@@ -92,6 +93,11 @@ export default function App() {
   // Opponent's display name (used in replay banner/overlay)
   const opponentLabel = myRole === 'player1' ? p2Label : myRole === 'player2' ? p1Label : p2Label;
 
+  // During replay, show the animated score rather than the held (pre-turn) store score
+  const watching = replayMode === 'watching';
+  const displayP1Score = watching && replayScore != null ? replayScore.player1 : player1Score;
+  const displayP2Score = watching && replayScore != null ? replayScore.player2 : player2Score;
+
   return (
     <div className="app">
       {/*
@@ -106,14 +112,14 @@ export default function App() {
         </span>
 
         <DigitCol
-          score={player1Score}
-          projected={projectedScore?.player1 ?? null}
+          score={displayP1Score}
+          projected={watching ? null : (projectedScore?.player1 ?? null)}
           owner="player1"
         />
 
         <DigitCol
-          score={player2Score}
-          projected={projectedScore?.player2 ?? null}
+          score={displayP2Score}
+          projected={watching ? null : (projectedScore?.player2 ?? null)}
           owner="player2"
         />
 

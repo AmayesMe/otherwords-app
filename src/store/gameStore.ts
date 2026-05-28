@@ -94,6 +94,8 @@ interface GameStore {
   replayMode: 'banner' | 'watching' | null;
   // Board/score state received from opponent but not yet shown (held until replay completes)
   pendingSync: SyncState | null;
+  // Live score shown in the score bar while replay animation is playing
+  replayScore: { player1: number; player2: number } | null;
 
   // ── Tile-placement actions ─────────────────────────────────────────────────
   placeTile: (tileId: string, slotIndex: number, col: number, row: number) => void;
@@ -120,7 +122,8 @@ interface GameStore {
 
   // ── Replay actions ─────────────────────────────────────────────────────────
   watchReplay: () => void;    // banner → watching (user clicks "see their play")
-  dismissReplay: () => void;  // clear pendingReplay after animation ends
+  dismissReplay: () => void;  // apply pendingSync + clear replay state
+  setReplayScore: (score: { player1: number; player2: number } | null) => void;
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   getCurrentRack: () => RackSlot[];
@@ -310,6 +313,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   pendingReplay: null,
   replayMode: null,
   pendingSync: null,
+  replayScore: null,
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -678,18 +682,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!data) throw new Error('Game not found — it may have expired.');
 
     if (data.player2_joined) {
-      // If it's now our turn and there's a replay → opponent went while we were away
       const hasReplay = !!data.state.lastTurnReplay && data.state.currentPlayer === role;
-      set({
-        ...applySyncState(data.state),
-        gameId,
-        myRole: role,
-        isWaitingForOpponent: false,
-        syncError: null,
-        screen: 'playing',
-        pendingReplay: hasReplay ? data.state.lastTurnReplay! : null,
-        replayMode: hasReplay ? 'watching' : null,
-      });
+
+      if (hasReplay) {
+        // Opponent played while we were away. Show the same banner experience as the live
+        // case: set the board to boardBefore so the pre-turn state is visible, hold the
+        // final result in pendingSync, and wait for the user to choose Watch or Play now.
+        const replayData = data.state.lastTurnReplay!;
+        const preScore = countScore(replayData.boardBefore);
+        set({
+          ...applySyncState(data.state),      // racks, tileBag, turnCount…
+          board: replayData.boardBefore,      // pre-turn board — don't spoil the result
+          player1Score: preScore.player1,     // pre-turn scores
+          player2Score: preScore.player2,
+          currentPlayer: replayData.player,  // who just played (so isMyTurn() = false)
+          gameId,
+          myRole: role,
+          isWaitingForOpponent: false,
+          syncError: null,
+          screen: 'playing',
+          pendingReplay: replayData,
+          replayMode: 'banner',              // same flow as live update
+          pendingSync: data.state,           // applied when user dismisses replay
+        });
+      } else {
+        set({
+          ...applySyncState(data.state),
+          gameId,
+          myRole: role,
+          isWaitingForOpponent: false,
+          syncError: null,
+          screen: 'playing',
+          pendingReplay: null,
+          replayMode: null,
+          pendingSync: null,
+        });
+      }
     } else {
       // Still waiting for opponent — restore waiting state, stay on lobby
       set({
@@ -701,6 +729,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         screen: 'lobby',
         pendingReplay: null,
         replayMode: null,
+        pendingSync: null,
       });
     }
 
@@ -774,6 +803,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pendingReplay: null,
       replayMode: null,
       pendingSync: null,
+      replayScore: null,
     });
   },
 
@@ -783,11 +813,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   dismissReplay() {
     const { pendingSync } = get();
+    const clearReplay = { pendingReplay: null, replayMode: null, pendingSync: null, replayScore: null };
     if (pendingSync) {
-      // Apply the opponent's turn result that we were holding back
-      set({ ...applySyncState(pendingSync), pendingReplay: null, replayMode: null, pendingSync: null });
+      set({ ...applySyncState(pendingSync), ...clearReplay });
     } else {
-      set({ pendingReplay: null, replayMode: null });
+      set(clearReplay);
     }
+  },
+
+  setReplayScore(score) {
+    set({ replayScore: score });
   },
 }));

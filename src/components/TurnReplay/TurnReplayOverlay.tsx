@@ -11,29 +11,32 @@ const BONUS_CLASS: Record<number, string>  = { 1: 'bonus-1', 2: 'bonus-2', 3: 'b
 const TILE_INTERVAL     = 290;   // ms between each tile reveal
 const PAUSE_AFTER_PLACE = 650;   // ms pause before confiscation flips begin
 const FLIP_DURATION     = 480;   // ms for the 3-D flip to complete (matches CSS 400ms + buffer)
-const DONE_DELAY        = 450;   // ms pause after flips before auto-dismissing
+const DONE_DELAY        = 400;   // ms pause after flips before showing completion buttons
 
 interface Props {
   replay: TurnReplay;
   opponentName: string;
+  /** Called when the player is done watching and wants to proceed to their turn. */
   onDone: () => void;
 }
 
 export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
+  // Incrementing this re-runs the animation (for "Watch again")
+  const [animKey, setAnimKey]         = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [isFlippingPhase, setIsFlippingPhase] = useState(false);
+  const [animDone, setAnimDone]       = useState(false);
 
-  // Keep a stable ref to onDone so the effect doesn't need it as a dep
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
 
-  // Sort placements in reading order (top-left → bottom-right)
+  // Sort placements reading-order (top-left → bottom-right)
   const sortedPlacements = useMemo(
     () => [...replay.placements].sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col),
     [replay.placements],
   );
 
-  // Which keys are currently in the "flipping" phase
+  // Keys currently in the 3-D flip phase
   const flippingSet = useMemo(
     () => isFlippingPhase
       ? new Set(replay.confiscated.map(c => `${c.col},${c.row}`))
@@ -41,15 +44,19 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
     [isFlippingPhase, replay.confiscated],
   );
 
-  // Which keys have been revealed so far (for isNew lift effect)
+  // Keys that have been placed so far (for the isNew lift effect)
   const revealedKeys = useMemo(() => {
     const s = new Set<string>();
     for (let i = 0; i < revealedCount; i++) s.add(`${sortedPlacements[i].col},${sortedPlacements[i].row}`);
     return s;
   }, [revealedCount, sortedPlacements]);
 
-  // Drive the animation sequence once on mount
+  // Drive the animation — re-runs on "Watch again" (animKey bump)
   useEffect(() => {
+    setRevealedCount(0);
+    setIsFlippingPhase(false);
+    setAnimDone(false);
+
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     sortedPlacements.forEach((_, i) => {
@@ -60,13 +67,13 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
 
     if (replay.confiscated.length > 0) {
       timers.push(setTimeout(() => setIsFlippingPhase(true), afterPlacements));
-      timers.push(setTimeout(() => onDoneRef.current(), afterPlacements + FLIP_DURATION + DONE_DELAY));
+      timers.push(setTimeout(() => setAnimDone(true), afterPlacements + FLIP_DURATION + DONE_DELAY));
     } else {
-      timers.push(setTimeout(() => onDoneRef.current(), afterPlacements));
+      timers.push(setTimeout(() => setAnimDone(true), afterPlacements));
     }
 
     return () => timers.forEach(clearTimeout);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentionally mount-only
+  }, [animKey]); // eslint-disable-line react-hooks/exhaustive-deps — intentionally animKey-only
 
   // Build the display board: boardBefore + revealed placements
   const displayBoard = useMemo((): BoardState =>
@@ -84,15 +91,21 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
     [revealedKeys, sortedPlacements, replay],
   );
 
+  function handleWatchAgain() {
+    setAnimKey(k => k + 1);
+  }
+
   return (
     <div className="replay-overlay">
-      {/* Header */}
+      {/* Header — label always visible; Skip only shown while animating */}
       <div className="replay-header">
         <span className="replay-header-label">{opponentName}&rsquo;s play</span>
-        <button className="replay-skip-btn" onClick={() => onDoneRef.current()}>Skip</button>
+        {!animDone && (
+          <button className="replay-skip-btn" onClick={() => onDoneRef.current()}>Skip</button>
+        )}
       </div>
 
-      {/* Read-only board showing the animated replay */}
+      {/* Read-only animated board */}
       <div className="board">
         {displayBoard.map((row, rowIndex) =>
           row.map((cell, colIndex) => {
@@ -105,19 +118,15 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
                 key={key}
                 className={[
                   'cell',
-                  // Show bonus colour only when cell is empty and bonus not yet consumed
                   cell.bonus && !cell.tile && !cell.bonusUsed ? BONUS_CLASS[cell.bonus] : '',
                 ].filter(Boolean).join(' ')}
               >
-                {/* Centre star for empty centre cell */}
                 {!cell.tile && isCenterCell(colIndex, rowIndex) && (
                   <span className="center-star">★</span>
                 )}
-                {/* Bonus label for unclaimed bonus spaces */}
                 {cell.bonus && !cell.tile && !cell.bonusUsed && (
                   <span className="bonus-label">{BONUS_LABELS[cell.bonus]}</span>
                 )}
-                {/* Tile (with flip support) */}
                 {cell.tile && (
                   <Tile
                     letter={cell.tile.wildLetter ?? (cell.tile.isWild ? '' : cell.tile.letter)}
@@ -127,7 +136,6 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
                     isFlipping={isFlipping}
                   />
                 )}
-                {/* Tiny bonus pip when a tile covers a bonus space */}
                 {cell.bonus && cell.bonusUsed && cell.tile && (
                   <span className="bonus-pip">{BONUS_LABELS[cell.bonus]}</span>
                 )}
@@ -136,6 +144,18 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
           })
         )}
       </div>
+
+      {/* Completion row — shown after animation finishes */}
+      {animDone && (
+        <div className="replay-done-row">
+          <button className="replay-done-btn replay-done-secondary" onClick={handleWatchAgain}>
+            Watch again
+          </button>
+          <button className="replay-done-btn replay-done-primary" onClick={() => onDoneRef.current()}>
+            Play
+          </button>
+        </div>
+      )}
     </div>
   );
 }

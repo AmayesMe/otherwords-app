@@ -151,6 +151,14 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   color: rgba(255, 255, 255, 0.7);
+  flex: 1;
+}
+
+.opponent-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .opponent-banner-btn {
@@ -167,10 +175,24 @@
   cursor: pointer;
   white-space: nowrap;
   transition: background 150ms ease;
-  flex-shrink: 0;
 }
 
 .opponent-banner-btn:hover { background: rgba(255, 255, 255, 0.2); }
+
+.opponent-banner-skip {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.3);
+  background: none;
+  border: none;
+  padding: 6px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 150ms ease;
+}
+
+.opponent-banner-skip:hover { color: rgba(255, 255, 255, 0.6); }
 
 /* Leave-game button — fixed top-right */
 .back-btn {

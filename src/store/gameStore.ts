@@ -92,6 +92,8 @@ interface GameStore {
   // ── Replay state ───────────────────────────────────────────────────────────
   pendingReplay: TurnReplay | null;
   replayMode: 'banner' | 'watching' | null;
+  // Board/score state received from opponent but not yet shown (held until replay completes)
+  pendingSync: SyncState | null;
 
   // ── Tile-placement actions ─────────────────────────────────────────────────
   placeTile: (tileId: string, slotIndex: number, col: number, row: number) => void;
@@ -307,6 +309,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Replay
   pendingReplay: null,
   replayMode: null,
+  pendingSync: null,
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -742,12 +745,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Apply opponent's committed turn (ignore our own echo via turnCount guard)
     if (row.state.turnCount > turnCount) {
-      Object.assign(update, applySyncState(row.state));
-
-      // If it's now our turn → opponent just went. If game is on-screen, show the banner.
+      // Opponent played while our game screen is open and there's a replay to show —
+      // hold the new board state in pendingSync so the board doesn't jump to the
+      // post-turn result before the player has had a chance to watch the replay.
       if (screen === 'playing' && row.state.lastTurnReplay && row.state.currentPlayer === myRole) {
         update.pendingReplay = row.state.lastTurnReplay;
         update.replayMode = 'banner';
+        update.pendingSync = row.state;
+      } else {
+        Object.assign(update, applySyncState(row.state));
       }
     }
 
@@ -767,6 +773,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pendingWildAssignment: null,
       pendingReplay: null,
       replayMode: null,
+      pendingSync: null,
     });
   },
 
@@ -775,6 +782,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   dismissReplay() {
-    set({ pendingReplay: null, replayMode: null });
+    const { pendingSync } = get();
+    if (pendingSync) {
+      // Apply the opponent's turn result that we were holding back
+      set({ ...applySyncState(pendingSync), pendingReplay: null, replayMode: null, pendingSync: null });
+    } else {
+      set({ pendingReplay: null, replayMode: null });
+    }
   },
 }));

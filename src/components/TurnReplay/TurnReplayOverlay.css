@@ -55,3 +55,29 @@
 }
 
 .replay-skip-btn:hover { color: rgba(255, 255, 255, 0.65); }
+
+/* Completion row: Watch again + Play */
+.replay-done-row {
+  display: flex;
+  gap: 10px;
+  animation: replay-enter 200ms ease-out both;
+}
+
+.replay-done-btn {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.replay-done-btn:hover  { opacity: 0.82; }
+.replay-done-btn:active { opacity: 0.65; }
+
+.replay-done-primary   { background: #FFFFFF; color: #111111; }
+.replay-done-secondary { background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.75); }

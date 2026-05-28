@@ -34,7 +34,7 @@
 }
 
 .tile-inner.tile-flipping {
-  transform: rotateY(180deg);
+  transform: rotateX(180deg);
 }
 
 .tile-new .tile-inner {
@@ -59,7 +59,7 @@
 }
 
 .tile-back {
-  transform: rotateY(180deg);
+  transform: rotateX(180deg);
 }
 
 .tile-p1 { background-color: var(--color-player1); color: var(--color-player1-letter); }

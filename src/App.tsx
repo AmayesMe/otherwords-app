@@ -138,9 +138,10 @@ export default function App() {
           <span className="opponent-banner-text">
             {opponentLabel} played their turn
           </span>
-          <button className="opponent-banner-btn" onClick={watchReplay}>
-            Watch their play
-          </button>
+          <div className="opponent-banner-actions">
+            <button className="opponent-banner-btn" onClick={watchReplay}>Watch their play</button>
+            <button className="opponent-banner-skip" onClick={dismissReplay}>Play now</button>
+          </div>
         </div>
       )}
 

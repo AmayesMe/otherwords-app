@@ -17,6 +17,9 @@
   column-gap: 10px;
   align-items: start;
   width: 100%;
+  /* Stay above the replay overlay (z-index 50) so scores are always visible */
+  position: relative;
+  z-index: 51;
 }
 
 /* Stacks actual score on top of projected score */

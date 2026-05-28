@@ -1,17 +1,14 @@
-/* Full-screen overlay that sits on top of the game during replay */
+/* Full-screen overlay that sits on top of the game during replay.
+   Only the board lives in the flex flow so it stays perfectly centered
+   regardless of what header / done-row chrome appears around it. */
 .replay-overlay {
   position: fixed;
   inset: 0;
   z-index: 50;
   background: rgba(0, 0, 0, 0.88);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
-  padding: calc(var(--space-3) + env(safe-area-inset-top, 0px))
-           var(--space-2)
-           calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
   /* Slide in from the bottom */
   animation: replay-enter 220ms ease-out both;
 }
@@ -21,13 +18,17 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Header row: label on the left, Skip on the right */
+/* Header row: pinned to top of overlay, never affects board position */
 .replay-header {
+  position: absolute;
+  top: calc(var(--space-3) + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 2 * var(--space-2));
+  max-width: calc(13 * var(--tile-size) + 12 * var(--cell-gap) + 2 * var(--cell-gap));
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  max-width: calc(13 * var(--tile-size) + 12 * var(--cell-gap) + 2 * var(--cell-gap));
   padding: 0 2px;
 }
 
@@ -56,9 +57,14 @@
 
 .replay-skip-btn:hover { color: rgba(255, 255, 255, 0.65); }
 
-/* Completion row: Watch again + Play */
+/* Completion row: pinned to bottom of overlay, never affects board position */
 .replay-done-row {
+  position: absolute;
+  bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  right: 0;
   display: flex;
+  justify-content: center;
   gap: 10px;
   animation: replay-enter 200ms ease-out both;
 }

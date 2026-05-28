@@ -4,13 +4,23 @@ import { useGameStore } from '../../store/gameStore';
 import { pointerDown, pointerMove, pointerUp, pointerCancel } from '../../utils/pointerDrag';
 
 export function Rack() {
-  const { getCurrentRack, currentPlayer, recallAllTiles, moveRackTileToSlot, placeTile, shuffleRack, endTurn, turnError, isMyTurn } = useGameStore();
+  const { getCurrentRack, currentPlayer, recallAllTiles, moveRackTileToSlot, placeTile, shuffleRack, endTurn, turnError, isMyTurn, tileBag } = useGameStore();
   const slots = getCurrentRack();
   const canPlay = isMyTurn();
+  const bagCount = tileBag.length;
 
   return (
     <div className="rack-wrapper">
       <div className="rack-row">
+        {/* Tile bag counter */}
+        <div className="bag-count" title={`${bagCount} tile${bagCount === 1 ? '' : 's'} remaining in bag`}>
+          <svg className="bag-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M7 5C7 3.343 8.343 2 10 2s3 1.343 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+            <path d="M5.5 5h9l1.5 10.5A1.5 1.5 0 0 1 14.5 17h-9A1.5 1.5 0 0 1 4 15.5L5.5 5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+          </svg>
+          <span className="bag-count-num">{bagCount}</span>
+        </div>
+
         {/* data-drop-rack-area lets board tiles detect a drop on the rack (→ recall) */}
         <div className="rack" data-drop-rack-area>
           {slots.map((slot, i) => (

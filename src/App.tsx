@@ -5,6 +5,7 @@ import { Rack } from './components/Rack/Rack';
 import { LetterPicker } from './components/LetterPicker/LetterPicker';
 import { Lobby } from './components/Lobby/Lobby';
 import { Tile } from './components/Tile/Tile';
+import { TurnReplayOverlay } from './components/TurnReplay/TurnReplayOverlay';
 import { useGameStore } from './store/gameStore';
 import { countScore } from './game/boardUtils';
 import { extractNewWords, findConfiscatedCells } from './game/wordUtils';
@@ -60,6 +61,10 @@ export default function App() {
     isMyTurn,
     syncError,
     resetToLobby,
+    pendingReplay,
+    replayMode,
+    watchReplay,
+    dismissReplay,
   } = useGameStore();
 
   const projectedScore = useMemo(() => {
@@ -83,6 +88,9 @@ export default function App() {
   const p1Label = player1Name || (myRole === 'player1' ? myName : '') || 'Player 1';
   const p2Label = player2Name || (myRole === 'player2' ? myName : '') || 'Player 2';
   const myTurn  = isMyTurn();
+
+  // Opponent's display name (used in replay banner/overlay)
+  const opponentLabel = myRole === 'player1' ? p2Label : myRole === 'player2' ? p1Label : p2Label;
 
   return (
     <div className="app">
@@ -120,8 +128,20 @@ export default function App() {
           Waiting for opponent — code: <strong>{gameId}</strong>
         </div>
       )}
-      {gameId && !isWaitingForOpponent && !myTurn && (
+      {gameId && !isWaitingForOpponent && !myTurn && replayMode !== 'banner' && (
         <div className="waiting-banner">Waiting for opponent…</div>
+      )}
+
+      {/* Opponent played banner — shown when they move while game screen is open */}
+      {replayMode === 'banner' && pendingReplay && (
+        <div className="opponent-banner">
+          <span className="opponent-banner-text">
+            {opponentLabel} played their turn
+          </span>
+          <button className="opponent-banner-btn" onClick={watchReplay}>
+            Watch their play
+          </button>
+        </div>
       )}
 
       {syncError && (
@@ -140,6 +160,15 @@ export default function App() {
 
       {gameId && (
         <button className="back-btn" onClick={resetToLobby} title="Leave game">✕</button>
+      )}
+
+      {/* Replay overlay — full-screen animated board shown during replay */}
+      {replayMode === 'watching' && pendingReplay && (
+        <TurnReplayOverlay
+          replay={pendingReplay}
+          opponentName={opponentLabel}
+          onDone={dismissReplay}
+        />
       )}
     </div>
   );

@@ -25,6 +25,30 @@ export interface SavedGame {
   role: Player;
 }
 
+// ── Replay types ─────────────────────────────────────────────────────────────
+
+export interface ReplayPlacement {
+  col: number;
+  row: number;
+  letter: string;
+  isWild: boolean;
+  wildLetter?: string;
+}
+
+export interface ReplayConfiscation {
+  col: number;
+  row: number;
+  fromOwner: Player;
+}
+
+/** A full record of one player's turn, used to animate the replay. */
+export interface TurnReplay {
+  player: Player;
+  placements: ReplayPlacement[];
+  confiscated: ReplayConfiscation[];
+  boardBefore: BoardState;   // board state at the START of this turn
+}
+
 /** Subset of game state that gets serialised to Supabase on every turn end. */
 export interface SyncState {
   board: BoardState;
@@ -37,6 +61,7 @@ export interface SyncState {
   turnCount: number;
   player1Name?: string;
   player2Name?: string;
+  lastTurnReplay?: TurnReplay;
 }
 
 interface GameStore {
@@ -64,6 +89,10 @@ interface GameStore {
   syncError: string | null;
   savedGames: SavedGame[];      // games this device has created or joined
 
+  // ── Replay state ───────────────────────────────────────────────────────────
+  pendingReplay: TurnReplay | null;
+  replayMode: 'banner' | 'watching' | null;
+
   // ── Tile-placement actions ─────────────────────────────────────────────────
   placeTile: (tileId: string, slotIndex: number, col: number, row: number) => void;
   moveTile: (fromCol: number, fromRow: number, toCol: number, toRow: number) => void;
@@ -86,6 +115,10 @@ interface GameStore {
   startPlayingNow: () => void;
   applyRemoteRow: (row: { state: SyncState; player2_joined: boolean }) => void;
   resetToLobby: () => void;
+
+  // ── Replay actions ─────────────────────────────────────────────────────────
+  watchReplay: () => void;    // banner → watching (user clicks "see their play")
+  dismissReplay: () => void;  // clear pendingReplay after animation ends
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   getCurrentRack: () => RackSlot[];
@@ -270,6 +303,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isWaitingForOpponent: false,
   syncError: null,
   savedGames: loadSavedGames(),
+
+  // Replay
+  pendingReplay: null,
+  replayMode: null,
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -497,6 +534,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const confiscated = findConfiscatedCells(newBoard, currentTurnPlacements, newWords);
+
+    // Build replay data — capture fromOwner BEFORE applying confiscation to newBoard
+    const replayConfiscated: ReplayConfiscation[] = confiscated
+      .filter(({ col, row }) => newBoard[row][col].tile?.owner !== currentPlayer)
+      .map(({ col, row }) => ({ col, row, fromOwner: newBoard[row][col].tile!.owner }));
+
     for (const { col, row } of confiscated) {
       const cell = newBoard[row][col];
       if (cell.tile && cell.tile.owner !== currentPlayer) {
@@ -515,6 +558,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
         finalRack.push({ id: makeTileId(), letter, isWild: letter === '*' });
       }
     }
+
+    // Build boardBefore: revert placements from `board` (pre-bonus-processing)
+    const boardBefore: BoardState = board.map(r => r.map(c => ({ ...c })));
+    for (const [key, placement] of Object.entries(currentTurnPlacements)) {
+      const [col, row] = key.split(',').map(Number);
+      boardBefore[row][col] = { ...boardBefore[row][col], tile: placement.replacedTile };
+    }
+
+    const replayPlacements: ReplayPlacement[] = Object.entries(currentTurnPlacements).map(([key, p]) => {
+      const [col, row] = key.split(',').map(Number);
+      return { col, row, letter: p.letter, isWild: p.isWild, wildLetter: board[row][col].tile?.wildLetter };
+    });
+
+    const replay: TurnReplay = {
+      player: currentPlayer,
+      placements: replayPlacements,
+      confiscated: replayConfiscated,
+      boardBefore,
+    };
 
     const scores = countScore(newBoard);
     const nextPlayer: Player = currentPlayer === 'player1' ? 'player2' : 'player1';
@@ -536,7 +598,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Push to Supabase after a successful turn (online mode only)
     if (gameId) {
-      pushState(gameId, extractSyncState(get())).catch(() => {
+      const syncToSave: SyncState = { ...extractSyncState(get()), lastTurnReplay: replay };
+      pushState(gameId, syncToSave).catch(() => {
         set({ syncError: 'Turn saved locally but failed to sync. Your opponent may not see it.' });
       });
     }
@@ -612,6 +675,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!data) throw new Error('Game not found — it may have expired.');
 
     if (data.player2_joined) {
+      // If it's now our turn and there's a replay → opponent went while we were away
+      const hasReplay = !!data.state.lastTurnReplay && data.state.currentPlayer === role;
       set({
         ...applySyncState(data.state),
         gameId,
@@ -619,6 +684,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         isWaitingForOpponent: false,
         syncError: null,
         screen: 'playing',
+        pendingReplay: hasReplay ? data.state.lastTurnReplay! : null,
+        replayMode: hasReplay ? 'watching' : null,
       });
     } else {
       // Still waiting for opponent — restore waiting state, stay on lobby
@@ -629,6 +696,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         isWaitingForOpponent: true,
         syncError: null,
         screen: 'lobby',
+        pendingReplay: null,
+        replayMode: null,
       });
     }
 
@@ -662,7 +731,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   applyRemoteRow(row) {
-    const { isWaitingForOpponent, turnCount } = get();
+    const { isWaitingForOpponent, turnCount, myRole, screen } = get();
     const update: Partial<GameStore> = {};
 
     // Player 1 sees opponent connect → start the game
@@ -674,6 +743,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Apply opponent's committed turn (ignore our own echo via turnCount guard)
     if (row.state.turnCount > turnCount) {
       Object.assign(update, applySyncState(row.state));
+
+      // If it's now our turn → opponent just went. If game is on-screen, show the banner.
+      if (screen === 'playing' && row.state.lastTurnReplay && row.state.currentPlayer === myRole) {
+        update.pendingReplay = row.state.lastTurnReplay;
+        update.replayMode = 'banner';
+      }
     }
 
     if (Object.keys(update).length > 0) set(update as GameStore);
@@ -690,6 +765,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       turnError: null,
       currentTurnPlacements: {},
       pendingWildAssignment: null,
+      pendingReplay: null,
+      replayMode: null,
     });
+  },
+
+  watchReplay() {
+    set({ replayMode: 'watching' });
+  },
+
+  dismissReplay() {
+    set({ pendingReplay: null, replayMode: null });
   },
 }));

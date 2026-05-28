@@ -8,20 +8,15 @@
   gap: var(--space-2);
 }
 
-/* Score bar — both players centred side by side */
+/* Score bar — 4-column grid so tiles are always the two inner columns.
+   Labels live in the outer 1fr columns and extend away from centre,
+   keeping the tiles perfectly centred regardless of name length. */
 .score-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
+  display: grid;
+  grid-template-columns: 1fr auto auto 1fr;
+  column-gap: 10px;
+  align-items: start;
   width: 100%;
-}
-
-/* One player's score group: [label] [digit-col] or [digit-col] [label] */
-.score-group {
-  display: flex;
-  align-items: flex-start; /* label top-aligns with the actual-score tile row */
-  gap: 10px;
 }
 
 /* Stacks actual score on top of projected score */
@@ -51,7 +46,7 @@
   font-size: calc(var(--tile-size) * 0.72);
 }
 
-/* Player name label */
+/* Player name label — shared base */
 .score-label {
   font-family: var(--font-sans);
   font-size: 11px;
@@ -61,11 +56,22 @@
   color: rgba(255, 255, 255, 0.35);
   transition: color 200ms ease;
   white-space: nowrap;
-  max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
   /* Visually top-align with the tile face, not the 3-D edge */
   padding-top: 3px;
+}
+
+/* P1 label: push it rightward toward its tiles */
+.score-label-p1 {
+  justify-self: end;
+  text-align: right;
+}
+
+/* P2 label: push it leftward toward its tiles */
+.score-label-p2 {
+  justify-self: start;
+  text-align: left;
 }
 
 .score-label-active {

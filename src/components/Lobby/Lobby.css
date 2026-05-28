@@ -251,23 +251,58 @@
   padding: 10px 12px;
 }
 
-/* Left column: code + sub-line */
+/* Left column */
 .lobby-game-left {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 
-.lobby-game-id {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.8);
+/* Player names + scores side by side */
+.lobby-game-matchup {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
+.lobby-game-player {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.lobby-game-player-name {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+}
+
+.lobby-game-player-score {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.lobby-game-vs {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.18);
+  flex: 0 0 auto;
+}
+
+/* Status + time sub-line */
 .lobby-game-sub {
   display: flex;
   align-items: center;
@@ -296,15 +331,25 @@
 
 .lobby-game-sep {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.15);
 }
 
-.lobby-game-score,
-.lobby-game-vs {
+.lobby-game-time {
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.32);
+  color: rgba(255, 255, 255, 0.28);
+}
+
+/* Game code — tertiary, bottom of left column */
+.lobby-game-code-label {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.16);
+  text-transform: uppercase;
+  margin-top: 1px;
 }
 
 /* Right column: buttons */

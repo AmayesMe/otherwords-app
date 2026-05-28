@@ -13,9 +13,13 @@ interface GameInfo {
   kind: GameStatusKind;
   myScore: number;
   theirScore: number;
-  opponentName: string;
+  myName: string;
+  theirName: string;
+  updatedAt: string;
   turnCount: number;
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function statusLabel(kind: GameStatusKind): string {
   switch (kind) {
@@ -38,19 +42,41 @@ function statusClass(kind: GameStatusKind): string {
   }
 }
 
-async function fetchGameInfo(game: SavedGame): Promise<GameInfo> {
+function formatTimeSince(dateStr: string): string {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins  = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days  = Math.floor(diff / 86_400_000);
+  if (mins  < 1)  return 'just now';
+  if (mins  < 60) return `${mins} minute${mins  === 1 ? '' : 's'} ago`;
+  if (hours < 24) {
+    const rem = mins % 60;
+    return rem === 0
+      ? `${hours} hour${hours === 1 ? '' : 's'} ago`
+      : `${hours} hour${hours === 1 ? '' : 's'} and ${rem} minute${rem === 1 ? '' : 's'} ago`;
+  }
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+async function fetchGameInfo(game: SavedGame, localName: string): Promise<GameInfo> {
   const data = await getGame(game.gameId);
-  if (!data) return { kind: 'not-found', myScore: 0, theirScore: 0, opponentName: '', turnCount: 0 };
-  const isP1 = game.role === 'player1';
+  if (!data) {
+    return { kind: 'not-found', myScore: 0, theirScore: 0, myName: localName || 'You', theirName: 'Opponent', updatedAt: '', turnCount: 0 };
+  }
+  const isP1      = game.role === 'player1';
   const myScore    = isP1 ? data.state.player1Score : data.state.player2Score;
   const theirScore = isP1 ? data.state.player2Score : data.state.player1Score;
-  const opponentName = isP1 ? (data.state.player2Name ?? '') : (data.state.player1Name ?? '');
+  const myName     = (isP1 ? data.state.player1Name : data.state.player2Name) || localName || 'You';
+  const theirName  = (isP1 ? data.state.player2Name : data.state.player1Name) || 'Opponent';
   let kind: GameStatusKind;
-  if (!data.player2_joined) kind = 'waiting';
-  else if (data.state.currentPlayer === game.role) kind = 'your-turn';
-  else kind = 'their-turn';
-  return { kind, myScore, theirScore, opponentName, turnCount: data.state.turnCount };
+  if (!data.player2_joined)                              kind = 'waiting';
+  else if (data.state.currentPlayer === game.role)       kind = 'your-turn';
+  else                                                   kind = 'their-turn';
+  return { kind, myScore, theirScore, myName, theirName, updatedAt: data.updated_at ?? '', turnCount: data.state.turnCount };
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function Lobby() {
   const {
@@ -67,18 +93,17 @@ export function Lobby() {
     gameId: storeGameId,
   } = useGameStore();
 
-  const [mode, setMode] = useState<Mode>('menu');
+  const [mode, setMode]         = useState<Mode>('menu');
   const [gameCode, setGameCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading]   = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [gameInfos, setGameInfos] = useState<Record<string, GameInfo>>({});
-  const [copied, setCopied] = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+  const [gameInfos, setGameInfos]   = useState<Record<string, GameInfo>>({});
+  const [copied, setCopied]         = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus join input when that screen appears
   useEffect(() => {
     if (mode === 'joining') inputRef.current?.focus();
   }, [mode]);
@@ -88,18 +113,23 @@ export function Lobby() {
     if (mode !== 'menu' || savedGames.length === 0) return;
     setGameInfos(
       Object.fromEntries(
-        savedGames.map(g => [g.gameId, { kind: 'loading' as GameStatusKind, myScore: 0, theirScore: 0, opponentName: '', turnCount: 0 }])
+        savedGames.map(g => [g.gameId, {
+          kind: 'loading' as GameStatusKind,
+          myScore: 0, theirScore: 0,
+          myName: myName || 'You', theirName: 'Opponent',
+          updatedAt: '', turnCount: 0,
+        }])
       )
     );
     savedGames.forEach(game => {
-      fetchGameInfo(game).then(info => {
+      fetchGameInfo(game, myName).then(info => {
         setGameInfos(prev => ({ ...prev, [game.gameId]: info }));
       });
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, savedGames]);
 
-  // If store enters waiting-for-opponent (e.g. after resuming an unstarted game),
-  // switch to the waiting screen automatically.
+  // Auto-switch to waiting screen when store enters waiting-for-opponent
   useEffect(() => {
     if (isWaitingForOpponent && storeGameId && mode !== 'waiting') {
       setGameCode(storeGameId);
@@ -129,7 +159,6 @@ export function Lobby() {
     setError(null);
     try {
       await joinOnlineGame(joinCode.trim());
-      // store sets screen → 'playing', Lobby unmounts
     } catch (e) {
       setError((e as Error).message ?? 'Failed to join. Try again.');
       setIsLoading(false);
@@ -140,29 +169,25 @@ export function Lobby() {
     if (e.key === 'Enter') handleJoin();
   }
 
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(gameCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard not available — silent fail
-    }
-  }
-
   async function handleResume(game: SavedGame) {
     setResumingId(game.gameId);
     setError(null);
     try {
       await resumeGame(game.gameId, game.role as Player);
-      // Active game → screen becomes 'playing', Lobby unmounts.
-      // Unstarted game → isWaitingForOpponent effect fires, sets mode 'waiting'.
     } catch (e) {
       setError((e as Error).message ?? 'Could not resume game.');
       setGameInfos(prev => ({ ...prev, [game.gameId]: { ...prev[game.gameId], kind: 'not-found' } }));
     } finally {
       setResumingId(null);
     }
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(gameCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* silent */ }
   }
 
   return (
@@ -193,31 +218,43 @@ export function Lobby() {
                 <p className="lobby-games-header">Your games</p>
                 <div className="lobby-games-list">
                   {savedGames.map(game => {
-                    const info = gameInfos[game.gameId];
-                    const kind: GameStatusKind = info?.kind ?? 'loading';
+                    const info       = gameInfos[game.gameId];
+                    const kind       = info?.kind ?? 'loading';
                     const isResuming = resumingId === game.gameId;
-                    const showScore  = info && info.turnCount > 0 && kind !== 'not-found';
-                    const showVs     = info?.opponentName;
+                    const showTime   = kind === 'your-turn' && info?.turnCount > 0 && info?.updatedAt;
                     return (
                       <div key={game.gameId} className="lobby-game-row">
                         <div className="lobby-game-left">
-                          <span className="lobby-game-id">{game.gameId}</span>
+                          {/* Player names + individual scores */}
+                          <div className="lobby-game-matchup">
+                            <span className="lobby-game-player">
+                              <span className="lobby-game-player-name">{info?.myName ?? '…'}</span>
+                              <span className="lobby-game-player-score">{info?.myScore ?? 0}</span>
+                            </span>
+                            <span className="lobby-game-vs">vs</span>
+                            <span className="lobby-game-player">
+                              <span className="lobby-game-player-score">{info?.theirScore ?? 0}</span>
+                              <span className="lobby-game-player-name">{info?.theirName ?? '…'}</span>
+                            </span>
+                          </div>
+
+                          {/* Status + time */}
                           <div className="lobby-game-sub">
                             <span className={statusClass(kind)}>{statusLabel(kind)}</span>
-                            {showScore && (
+                            {showTime && (
                               <>
                                 <span className="lobby-game-sep">·</span>
-                                <span className="lobby-game-score">{info.myScore}–{info.theirScore}</span>
-                              </>
-                            )}
-                            {showVs && (
-                              <>
-                                <span className="lobby-game-sep">·</span>
-                                <span className="lobby-game-vs">vs {info.opponentName}</span>
+                                <span className="lobby-game-time">
+                                  {info.theirName} played {formatTimeSince(info.updatedAt)}
+                                </span>
                               </>
                             )}
                           </div>
+
+                          {/* Game code — small, tertiary */}
+                          <span className="lobby-game-code-label">{game.gameId}</span>
                         </div>
+
                         <div className="lobby-game-actions">
                           <button
                             className="lobby-game-resume"
@@ -229,7 +266,7 @@ export function Lobby() {
                           <button
                             className="lobby-game-remove"
                             onClick={() => removeSavedGame(game.gameId)}
-                            title="Remove from list"
+                            title="Remove"
                             aria-label="Remove"
                           >
                             ×
@@ -245,20 +282,14 @@ export function Lobby() {
 
             {error && <p className="lobby-error">{error}</p>}
             <div className="lobby-actions">
-              <button className="lobby-btn lobby-btn-primary" onClick={handleCreate}>
-                New Game
-              </button>
-              <button className="lobby-btn lobby-btn-secondary" onClick={() => { setError(null); setMode('joining'); }}>
-                Join Game
-              </button>
-              <button className="lobby-btn lobby-btn-ghost" onClick={startLocalGame}>
-                Play Local
-              </button>
+              <button className="lobby-btn lobby-btn-primary" onClick={handleCreate}>New Game</button>
+              <button className="lobby-btn lobby-btn-secondary" onClick={() => { setError(null); setMode('joining'); }}>Join Game</button>
+              <button className="lobby-btn lobby-btn-ghost" onClick={startLocalGame}>Play Local</button>
             </div>
           </div>
         )}
 
-        {/* ── Creating (spinner) ────────────────────────────────────── */}
+        {/* ── Creating ──────────────────────────────────────────────── */}
         {mode === 'creating' && (
           <div className="lobby-section lobby-centered">
             <div className="lobby-spinner" />
@@ -293,10 +324,7 @@ export function Lobby() {
             {isWaitingForOpponent ? (
               <>
                 <p className="lobby-hint">Waiting for opponent to join…</p>
-                <button
-                  className="lobby-btn lobby-btn-primary"
-                  onClick={startPlayingNow}
-                >
+                <button className="lobby-btn lobby-btn-primary" onClick={startPlayingNow}>
                   Start Playing
                 </button>
                 <p className="lobby-hint-sm">Your opponent can still join using the code above</p>
@@ -332,10 +360,7 @@ export function Lobby() {
             />
             {error && <p className="lobby-error">{error}</p>}
             <div className="lobby-actions lobby-actions-row">
-              <button
-                className="lobby-btn lobby-btn-secondary"
-                onClick={() => { setMode('menu'); setError(null); setJoinCode(''); }}
-              >
+              <button className="lobby-btn lobby-btn-secondary" onClick={() => { setMode('menu'); setError(null); setJoinCode(''); }}>
                 Back
               </button>
               <button

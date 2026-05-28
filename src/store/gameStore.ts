@@ -643,7 +643,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   setPlayerName(name) {
     localStorage.setItem(NAME_KEY, name);
-    set({ myName: name });
+    const { gameId, myRole } = get();
+    // Also update the in-game name field so the opponent sees it immediately
+    const nameField = myRole === 'player1'
+      ? { player1Name: name }
+      : myRole === 'player2'
+        ? { player2Name: name }
+        : {};
+    set({ myName: name, ...nameField });
+    // Push to Supabase if currently in an active online game
+    if (gameId && myRole) {
+      pushState(gameId, extractSyncState(get())).catch(() => {});
+    }
   },
 
   startPlayingNow() {

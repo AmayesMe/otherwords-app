@@ -91,6 +91,7 @@ export async function pushState(gameId: string, state: SyncState): Promise<void>
 export interface GameRow {
   state: SyncState;
   player2_joined: boolean;
+  updated_at?: string;
 }
 
 /** Fetch current row for a game. Returns null if not found or on error. */
@@ -99,7 +100,7 @@ export async function getGame(
 ): Promise<GameRow | null> {
   const { data, error } = await supabase
     .from('games')
-    .select('state, player2_joined')
+    .select('state, player2_joined, updated_at')
     .eq('id', gameId)
     .single();
   if (error || !data) return null;

@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Tile } from '../Tile/Tile';
 import { isCenterCell, countScore } from '../../game/boardUtils';
 import { useGameStore } from '../../store/gameStore';
-import type { TurnReplay } from '../../store/gameStore';
+import type { TurnReplay, ReplayPlacement } from '../../store/gameStore';
 import type { BoardState, CellState } from '../../game/types';
 
 const BONUS_LABELS: Record<number, string> = { 1: '+1', 2: '+2', 3: '+3' };
@@ -11,11 +11,35 @@ const BONUS_CLASS: Record<number, string>  = { 1: 'bonus-1', 2: 'bonus-2', 3: 'b
 
 const INITIAL_DELAY      = 350;  // ms before first tile appears (overlay slide-in is 220ms)
 const TILE_INTERVAL      = 290;  // ms between consecutive tile placements
+const WORD_PAUSE         = 500;  // ms extra pause between separate word groups
 const PAUSE_AFTER_PLACE  = 700;  // ms pause before flips start
 const FLIP_STAGGER       = 220;  // ms between each flip start (tiles overlap slightly)
 const FLIP_CSS_DURATION  = 400;  // must match CSS transition on .tile-inner
 const FLIP_BUFFER        = 80;   // extra buffer after flip animation
 const DONE_DELAY         = 350;  // ms after last flip settles before showing completion buttons
+
+/**
+ * Split reading-order placements into word groups.
+ * A new group starts whenever a tile doesn't share the same row or column
+ * as the first tile of the current group (i.e. it's a separate word).
+ */
+function groupByWord(placements: ReplayPlacement[]): ReplayPlacement[][] {
+  if (placements.length === 0) return [];
+  const groups: ReplayPlacement[][] = [];
+  let current: ReplayPlacement[] = [placements[0]];
+  for (let i = 1; i < placements.length; i++) {
+    const anchor = current[0];
+    const p = placements[i];
+    if (p.row === anchor.row || p.col === anchor.col) {
+      current.push(p);
+    } else {
+      groups.push(current);
+      current = [p];
+    }
+  }
+  groups.push(current);
+  return groups;
+}
 
 interface Props {
   replay: TurnReplay;
@@ -70,13 +94,24 @@ export function TurnReplayOverlay({ replay, opponentName, onDone }: Props) {
 
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    // ── 1. Reveal placements one by one ──────────────────────────────────────
-    sortedPlacements.forEach((_, i) => {
-      timers.push(setTimeout(() => setRevealedCount(i + 1), INITIAL_DELAY + i * TILE_INTERVAL));
+    // ── 1. Reveal placements one by one, with a pause between word groups ────
+    const wordGroups = groupByWord(sortedPlacements);
+    let tileIndex = 0;
+    let timeOffset = INITIAL_DELAY;
+
+    wordGroups.forEach((group, groupIndex) => {
+      group.forEach(() => {
+        const i = tileIndex++;
+        timers.push(setTimeout(() => setRevealedCount(i + 1), timeOffset));
+        timeOffset += TILE_INTERVAL;
+      });
+      // Extra pause after each group except the last
+      if (groupIndex < wordGroups.length - 1) timeOffset += WORD_PAUSE;
     });
 
+    // afterPlacements = one TILE_INTERVAL past the last reveal + PAUSE_AFTER_PLACE
     const afterPlacements =
-      INITIAL_DELAY + Math.max(sortedPlacements.length, 1) * TILE_INTERVAL + PAUSE_AFTER_PLACE;
+      (wordGroups.length > 0 ? timeOffset : INITIAL_DELAY + TILE_INTERVAL) + PAUSE_AFTER_PLACE;
 
     // ── 2. Staggered one-at-a-time flips ─────────────────────────────────────
     if (sortedConfiscated.length > 0) {

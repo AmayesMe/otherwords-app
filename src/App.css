@@ -169,10 +169,10 @@
 }
 
 /* Portrait: the panel's rack is hidden; portrait rack is shown.
-   Must come AFTER the .rack-area base rule so the same-specificity
-   cascade correctly sets this to none (not overridden back to flex). */
+   !important ensures this wins over .rack-area { display: flex } regardless
+   of where Vite bundles the CSS rules, without relying on source order. */
 .rack-area-panel {
-  display: none;
+  display: none !important;
 }
 
 /* Online: waiting-for-opponent banner */
@@ -406,9 +406,10 @@
     animation: banner-slide-in 250ms ease-out both;
   }
 
-  /* Rack fills full panel content width (overrides the > * max-width constraint) */
+  /* Rack fills full panel content width (overrides the > * max-width constraint).
+     !important overrides the portrait .rack-area-panel { display: none !important }. */
   .rack-area-panel {
-    display: flex;
+    display: flex !important;
     width: 100%;
     max-width: none;  /* rack fills full panel width, not capped at 480px */
     justify-content: center;
@@ -426,7 +427,7 @@
 
   /* Portrait rack: hidden in landscape */
   .rack-area-portrait {
-    display: none;
+    display: none !important;
   }
 
   /* ── Board column (right) ────────────────────────────────────────────────── */

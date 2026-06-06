@@ -448,6 +448,14 @@
     box-shadow: none;
   }
 
+  /* ── Back / resign — keep in left panel, not over the board ─────────────── */
+  /* Board width = 13 tiles + 14 cell-gaps (12 gaps + 2 padding).
+     Offset right by that amount so the button stays inside the left panel. */
+  .back-btn,
+  .resign-confirm {
+    right: calc(13 * var(--board-tile-size) + 14 * var(--cell-gap) + 12px);
+  }
+
 }
 
 

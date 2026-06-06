@@ -46,11 +46,6 @@
   --space-3: 24px;
   --space-4: 32px;
 
-  /* Scrollbar width compensation — prevents 100vw from causing overflow on
-     desktop browsers that reserve space for scrollbars. Overridden to 0 on
-     mobile (no scrollbar). Most desktop browsers: ~15–17px when bar is shown;
-     since overflow:hidden is set on body the bar never appears, so 0px is fine. */
-  --scrollbar-width: 0px;
 }
 
 /* Portrait / narrow: tile size driven by viewport width edge-to-edge formula.

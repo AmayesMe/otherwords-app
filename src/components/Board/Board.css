@@ -10,3 +10,10 @@
     0 2px 4px rgba(0, 0, 0, 0.2),
     0 8px 32px rgba(0, 0, 0, 0.45);
 }
+
+@media (max-width: 600px) {
+  .board {
+    border-radius: 0;
+    box-shadow: none;
+  }
+}

@@ -30,6 +30,8 @@
      The overflow rack row only appears with >7 tiles (Board Buster bonus); the extra
      divisor slot reserves space for it without clipping buttons when it shows up. */
   --tile-size:      min(clamp(28px, 4.6vw, 50px), calc((100dvh - 300px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 16));
+  /* Mobile: board fills edge-to-edge. 13 tiles + 14 gaps (board padding × 2 + 12 cell gaps)
+     = 13t + 42px = 100vw → t = (100vw - 42px) / 13. Still capped by the height formula. */
   /* Used by the projected-score tiles. Defined here (not on the child) to avoid
      a CSS custom-property circular reference. */
   --tile-size-half: calc(var(--tile-size) * 0.5);
@@ -45,6 +47,15 @@
   --space-2: 16px;
   --space-3: 24px;
   --space-4: 32px;
+}
+
+@media (max-width: 600px) {
+  :root {
+    --tile-size: min(
+      calc((100vw - 42px) / 13),
+      calc((100dvh - 300px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 16)
+    );
+  }
 }
 
 body {

@@ -120,6 +120,15 @@
   overflow: hidden;
 }
 
+@media (max-width: 600px) {
+  /* Break out of the app's horizontal padding so the board sits edge-to-edge. */
+  .board-area {
+    width: 100vw;
+    margin-left: calc(-1 * var(--space-2));
+    overflow: hidden;
+  }
+}
+
 /* Rack area */
 .rack-area {
   width: 100%;

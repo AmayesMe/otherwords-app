@@ -116,9 +116,9 @@ export function Rack() {
         <button className="btn btn-icon" onClick={shuffleRack} title="Shuffle tiles">⇄</button>
       </div>
 
-      {turnError && <div className="turn-error">{turnError}</div>}
+      {canPlay && turnError && <div className="turn-error">{turnError}</div>}
 
-      {confirmingPass ? (
+      {canPlay && (confirmingPass ? (
         <div className="pass-confirm">
           <span className="pass-confirm-text">Pass your turn?</span>
           <div className="pass-confirm-btns">
@@ -128,10 +128,10 @@ export function Rack() {
         </div>
       ) : (
         <div className="turn-controls">
-          <button className="btn btn-secondary" onClick={recallAllTiles} disabled={!canPlay}>Reset</button>
-          <button className="btn btn-primary" onClick={handleEndTurn} disabled={!canPlay}>End Turn</button>
+          <button className="btn btn-secondary" onClick={recallAllTiles} disabled={!hasTilesPlaced}>Reset</button>
+          <button className="btn btn-primary" onClick={handleEndTurn}>End Turn</button>
         </div>
-      )}
+      ))}
     </div>
   );
 }

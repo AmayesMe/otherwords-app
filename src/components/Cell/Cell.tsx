@@ -39,6 +39,7 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
       className={['cell', showBonus && BONUS_CLASS[bonus!]].filter(Boolean).join(' ')}
       data-drop-col={col}
       data-drop-row={row}
+      onDragStart={e => e.preventDefault()}
     >
       {!tile && isCenter && <span className="center-star">★</span>}
       {showBonus && <span className="bonus-label">{BONUS_LABELS[bonus!]}</span>}

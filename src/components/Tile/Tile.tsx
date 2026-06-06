@@ -32,6 +32,8 @@ export function Tile({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       onClick={onClick}
+      onDragStart={e => e.preventDefault()}
+      draggable={false}
       style={{ cursor: isDraggable ? 'grab' : onClick ? 'pointer' : 'default' }}
     >
       <div className={`tile-inner${isFlipping ? ' tile-flipping' : ''}${isScoreFlipping ? ' tile-score-flipping' : ''}`}>

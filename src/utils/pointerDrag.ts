@@ -63,7 +63,9 @@ export function pointerDown(
   owner: Player,
 ): void {
   if (active) return;
-  e.preventDefault();  // Prevent Safari from starting a native drag-and-drop on text content
+  // NOTE: do NOT call e.preventDefault() here — in Safari, preventing default on
+  // pointerdown suppresses subsequent pointermove events, breaking drag entirely.
+  // Native drag-and-drop prevention is handled via onDragStart on the elements.
   e.stopPropagation();
 
   const el = e.currentTarget as HTMLElement;

@@ -143,3 +143,36 @@
 .btn-primary   { background-color: #FFFFFF; color: #111111; }
 .btn-secondary { background-color: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.75); }
 .btn-icon      { background-color: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.6); padding: 9px 14px; font-size: 16px; }
+
+/* ── Mobile rack: 7 tiles full-width ───────────────────────────────────────
+   Override --tile-size locally so board tiles are unaffected.
+   Formula: (100vw - 32px app padding - 16px rack padding - 24px tile gaps) / 7
+   Bag icon + shuffle ⇄ wrap to a second row below the tiles via order.      */
+@media (max-width: 600px) {
+  .rack-wrapper {
+    width: 100%;
+    gap: 10px;
+    --tile-size: calc((100vw - 72px) / 7);
+    --tile-thickness: 3px;
+  }
+
+  .rack-row {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Rack tiles span the full first row */
+  .rack {
+    order: 0;
+    flex: 1 1 100%;
+    box-sizing: border-box;
+    padding: 10px 8px;
+    gap: 4px;
+  }
+
+  /* Bag count and shuffle button drop below tiles */
+  .bag-count      { order: 1; }
+  .rack-row > .btn-icon { order: 1; }
+}

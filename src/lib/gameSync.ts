@@ -112,6 +112,8 @@ export function subscribeToGame(
   gameId: string,
   onUpdate: (row: GameRow) => void,
 ): RealtimeChannel {
+  let subscribedOnce = false;
+
   return supabase
     .channel(`game-${gameId}`)
     .on(
@@ -119,5 +121,14 @@ export function subscribeToGame(
       { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` },
       (payload) => onUpdate(payload.new as GameRow),
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        if (subscribedOnce) {
+          // Reconnected after a drop — fetch current DB row immediately to
+          // catch any update that arrived while the WebSocket was down.
+          getGame(gameId).then(row => { if (row) onUpdate(row); });
+        }
+        subscribedOnce = true;
+      }
+    });
 }

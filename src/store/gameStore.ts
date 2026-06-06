@@ -295,15 +295,44 @@ function upsertSavedGame(existing: SavedGame[], gameId: string, role: Player): S
 
 // ─── Real-time channel (module-level, one at a time) ─────────────────────────
 
-let _channel: RealtimeChannel | null = null;
+let _channel:      RealtimeChannel | null = null;
+let _pollTimer:    ReturnType<typeof setInterval> | null = null;
+let _pollGameId:   string | null = null;
+let _pollCallback: ((row: import('../lib/gameSync').GameRow) => void) | null = null;
 
-function attachChannel(ch: RealtimeChannel) {
-  if (_channel) { _channel.unsubscribe(); }
+function attachChannel(ch: RealtimeChannel, gameId: string, onRow: (row: import('../lib/gameSync').GameRow) => void) {
+  detachChannel();
   _channel = ch;
+
+  // Polling fallback — every 10 s, fetch from DB and apply if anything changed.
+  // Safe no-op when turnCount hasn't advanced (applyRemoteRow guards on turnCount).
+  _pollGameId   = gameId;
+  _pollCallback = onRow;
+  _pollTimer = setInterval(async () => {
+    if (!_pollGameId || !_pollCallback) return;
+    const row = await getGame(_pollGameId);
+    if (row) _pollCallback(row);
+  }, 10_000);
 }
 
 function detachChannel() {
-  if (_channel) { _channel.unsubscribe(); _channel = null; }
+  if (_channel)   { _channel.unsubscribe();      _channel   = null; }
+  if (_pollTimer) { clearInterval(_pollTimer);   _pollTimer = null; }
+  _pollGameId   = null;
+  _pollCallback = null;
+}
+
+// Visibility change — when the tab comes back into focus, immediately fetch
+// the latest state in case realtime missed anything while backgrounded.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    const { gameId, isWaitingForOpponent } = useGameStore.getState();
+    if (!gameId || isWaitingForOpponent) return;
+    getGame(gameId).then(row => {
+      if (row) useGameStore.getState().applyRemoteRow(row);
+    });
+  });
 }
 
 // ─── Store helpers ───────────────────────────────────────────────────────────
@@ -866,7 +895,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ savedGames: newSaved });
     persistSavedGames(newSaved);
 
-    attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)));
+    attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)), gameId, (row) => get().applyRemoteRow(row));
 
     return gameId;
   },
@@ -888,7 +917,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ savedGames: newSaved });
     persistSavedGames(newSaved);
 
-    attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)));
+    attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)), gameId, (row) => get().applyRemoteRow(row));
   },
 
   async resumeGame(gameId, role) {
@@ -947,7 +976,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
     }
 
-    attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)));
+    attachChannel(subscribeToGame(gameId, (row) => get().applyRemoteRow(row)), gameId, (row) => get().applyRemoteRow(row));
   },
 
   removeSavedGame(gameId) {

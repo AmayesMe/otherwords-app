@@ -173,3 +173,36 @@
   .bag-count      { order: 1; }
   .rack-row > .btn-icon { order: 1; }
 }
+
+/* ── Landscape rack: fills the left panel width at 7 tiles across ────────────
+   Applied via the .landscape-panel ancestor selector in App.css.
+   Here we handle the rack internal layout for landscape.
+   The --tile-size override comes from App.css on .landscape-panel .rack-wrapper. */
+@media (min-aspect-ratio: 4/3) {
+  .rack-wrapper {
+    width: 100%;
+    gap: 10px;
+    /* --tile-size set by App.css: (panel-width - 72px) / 7 via custom prop cascade */
+    --tile-thickness: 3px;
+  }
+
+  .rack-row {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Rack tiles span the full first row */
+  .rack {
+    order: 0;
+    flex: 1 1 100%;
+    box-sizing: border-box;
+    padding: 10px 8px;
+    gap: 4px;
+  }
+
+  /* Bag count and shuffle button drop below tiles */
+  .bag-count      { order: 1; }
+  .rack-row > .btn-icon { order: 1; }
+}

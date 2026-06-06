@@ -209,84 +209,105 @@ export default function App() {
   return (
     <div className="app">
       {/*
-        Score bar: 4-column grid
-          [P1 label] [P1 tiles] [P2 tiles] [P2 label]
-        The two tile columns are always the inner columns, so they stay
-        centred regardless of how long either name is.
+        Single DOM structure used for both portrait and landscape.
+
+        Portrait (.app flex-column):
+          .landscape-panel → display:contents (invisible wrapper, children
+          flow directly into .app's column flex context as if it doesn't exist)
+          Order: score-bar → banners → [board-area] → rack-area
+
+        Landscape (.app flex-row, min-aspect-ratio 4/3):
+          .landscape-panel → display:flex column (left column)
+          .board-area → right column, height 100dvh, board is hero
+          The rack-area inside landscape-panel replaces portrait's rack-area.
       */}
-      <header className="score-bar">
-        <span className={`score-label score-label-p1${currentPlayer === 'player1' ? ' score-label-active' : ''}`}>
-          <span className="score-label-name">{p1Label}</span>
-          {opponentTileCount !== null && myRole === 'player2' && (
-            <span className="score-tile-count">{opponentTileCount} tiles</span>
-          )}
-        </span>
 
-        <AnimatedDigitCol
-          score={displayP1Score}
-          projected={watching ? null : (projectedScore?.player1 ?? null)}
-          owner="player1"
-        />
+      {/* ── Left panel — transparent in portrait, column in landscape ────────── */}
+      <div className="landscape-panel">
 
-        <AnimatedDigitCol
-          score={displayP2Score}
-          projected={watching ? null : (projectedScore?.player2 ?? null)}
-          owner="player2"
-        />
-
-        <span className={`score-label score-label-p2${currentPlayer === 'player2' ? ' score-label-active' : ''}`}>
-          <span className="score-label-name">{p2Label}</span>
-          {opponentTileCount !== null && myRole === 'player1' && (
-            <span className="score-tile-count">{opponentTileCount} tiles</span>
-          )}
-        </span>
-      </header>
-
-      {/* Turn-status banner — always rendered when online so layout never shifts.
-          Hidden during opponent-banner / replay-overlay; otherwise shows
-          "Waiting for opponent", "Your turn", or the join-code message. */}
-      {gameId && (
-        <div
-          className="waiting-banner"
-          style={{ visibility: (replayMode === 'banner' || replayMode === 'watching') ? 'hidden' : 'visible' }}
-        >
-          {isWaitingForOpponent
-            ? <>Waiting for opponent — code: <strong>{gameId}</strong></>
-            : myTurn
-            ? 'Your turn'
-            : 'Waiting for opponent…'
-          }
-        </div>
-      )}
-
-      {/* Opponent played banner — shown when they move while game screen is open */}
-      {replayMode === 'banner' && pendingReplay && (
-        <div className="opponent-banner">
-          <span className="opponent-banner-text">
-            {opponentLabel} played their turn
+        {/* Score bar */}
+        <header className="score-bar">
+          <span className={`score-label score-label-p1${currentPlayer === 'player1' ? ' score-label-active' : ''}`}>
+            <span className="score-label-name">{p1Label}</span>
+            {opponentTileCount !== null && myRole === 'player2' && (
+              <span className="score-tile-count">{opponentTileCount} tiles</span>
+            )}
           </span>
-          <div className="opponent-banner-actions">
-            <button className="opponent-banner-btn" onClick={watchReplay}>Watch their play</button>
-            <button className="opponent-banner-skip" onClick={dismissReplay}>Play now</button>
+
+          <AnimatedDigitCol
+            score={displayP1Score}
+            projected={watching ? null : (projectedScore?.player1 ?? null)}
+            owner="player1"
+          />
+
+          <AnimatedDigitCol
+            score={displayP2Score}
+            projected={watching ? null : (projectedScore?.player2 ?? null)}
+            owner="player2"
+          />
+
+          <span className={`score-label score-label-p2${currentPlayer === 'player2' ? ' score-label-active' : ''}`}>
+            <span className="score-label-name">{p2Label}</span>
+            {opponentTileCount !== null && myRole === 'player1' && (
+              <span className="score-tile-count">{opponentTileCount} tiles</span>
+            )}
+          </span>
+        </header>
+
+        {/* Turn-status banner */}
+        {gameId && (
+          <div
+            className="waiting-banner"
+            style={{ visibility: (replayMode === 'banner' || replayMode === 'watching') ? 'hidden' : 'visible' }}
+          >
+            {isWaitingForOpponent
+              ? <>Waiting for opponent — code: <strong>{gameId}</strong></>
+              : myTurn
+              ? 'Your turn'
+              : 'Waiting for opponent…'
+            }
           </div>
-        </div>
-      )}
+        )}
 
-      {syncError && (
-        <div className="sync-error">{syncError}</div>
-      )}
+        {/* Opponent-played banner */}
+        {replayMode === 'banner' && pendingReplay && (
+          <div className="opponent-banner">
+            <span className="opponent-banner-text">
+              {opponentLabel} played their turn
+            </span>
+            <div className="opponent-banner-actions">
+              <button className="opponent-banner-btn" onClick={watchReplay}>Watch their play</button>
+              <button className="opponent-banner-skip" onClick={dismissReplay}>Play now</button>
+            </div>
+          </div>
+        )}
 
+        {syncError && (
+          <div className="sync-error">{syncError}</div>
+        )}
+
+        {/* Rack — in landscape this is in the left panel; in portrait this
+            flows between the board and nothing (but .rack-area-portrait below
+            is what actually shows in portrait — this one is hidden by CSS) */}
+        <footer className="rack-area rack-area-panel">
+          <Rack />
+        </footer>
+
+      </div>{/* end .landscape-panel */}
+
+      {/* ── Board — always present; right column in landscape ────────────────── */}
       <main className="board-area">
         <Board board={board} />
       </main>
 
-      <footer className="rack-area">
+      {/* ── Portrait rack — shown only in portrait, hidden in landscape ───────── */}
+      <footer className="rack-area rack-area-portrait">
         <Rack />
       </footer>
 
       <LetterPicker />
 
-      {/* Back/resign button — always shown in-game */}
+      {/* Back/resign button */}
       {showResignConfirm ? (
         <div className="resign-confirm">
           <span className="resign-confirm-text">{gameId ? 'Resign?' : 'Leave game?'}</span>
@@ -306,7 +327,7 @@ export default function App() {
         >✕</button>
       )}
 
-      {/* Replay overlay — full-screen animated board shown during replay */}
+      {/* Replay overlay */}
       {replayMode === 'watching' && pendingReplay && (
         <TurnReplayOverlay
           replay={pendingReplay}
@@ -315,7 +336,7 @@ export default function App() {
         />
       )}
 
-      {/* Game over screen — renders above everything */}
+      {/* Game over screen */}
       {gameOver && <GameOverScreen gameOver={gameOver} />}
     </div>
   );

@@ -17,3 +17,11 @@
     box-shadow: none;
   }
 }
+
+/* Landscape: board fills the right column edge-to-edge — no rounding, no shadow */
+@media (min-aspect-ratio: 4/3) {
+  .board {
+    border-radius: 0;
+    box-shadow: none;
+  }
+}

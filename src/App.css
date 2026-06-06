@@ -1,3 +1,17 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   APP LAYOUT
+   Portrait (default): .app is flex-column.
+     .landscape-panel uses display:contents so its children flow as direct
+     flex items of .app (invisible wrapper).
+     .rack-area-panel is hidden; .rack-area-portrait shows the rack.
+
+   Landscape (min-aspect-ratio 4/3): .app is flex-row.
+     .landscape-panel is the left column (flex container).
+     .board-area is the right column.
+     .rack-area-portrait is hidden; .rack-area-panel (inside landscape-panel)
+     shows the rack.
+   ───────────────────────────────────────────────────────────────────────────── */
+
 .app {
   height: 100%;
   display: flex;
@@ -8,7 +22,25 @@
   gap: var(--space-2);
 }
 
-/* Score bar — 4-column grid so tiles are always the two inner columns.
+/* Portrait: panel is transparent — its children flow into .app's flex context */
+.landscape-panel {
+  display: contents;
+}
+
+/* Portrait: the panel's rack is hidden; portrait rack is shown */
+.rack-area-panel {
+  display: none;
+}
+
+/* Portrait: portrait rack is shown normally */
+.rack-area-portrait {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* ── Score bar ───────────────────────────────────────────────────────────── */
+/* 4-column grid so tiles are always the two inner columns.
    Labels live in the outer 1fr columns and extend away from centre,
    keeping the tiles perfectly centred regardless of name length. */
 .score-bar {
@@ -109,7 +141,8 @@
   .score-label-active { animation: none; }
 }
 
-/* Board area — flex: 1 takes remaining space; min-height: 0 lets it shrink
+/* ── Board area ──────────────────────────────────────────────────────────── */
+/* flex: 1 takes remaining space; min-height: 0 lets it shrink
    below its content so an oversized board never pushes the rack off screen. */
 .board-area {
   flex: 1;
@@ -121,7 +154,8 @@
 }
 
 @media (max-width: 600px) {
-  /* Break out of the app's horizontal padding so the board sits edge-to-edge. */
+  /* Break out of the app's horizontal padding so the board sits edge-to-edge.
+     overflow:hidden on body ensures 100vw won't cause a scrollbar feedback loop. */
   .board-area {
     width: 100vw;
     margin-left: calc(-1 * var(--space-2));
@@ -129,9 +163,8 @@
   }
 }
 
-/* Rack area */
+/* ── Rack area (shared base) ─────────────────────────────────────────────── */
 .rack-area {
-  width: 100%;
   display: flex;
   justify-content: center;
 }
@@ -317,4 +350,96 @@
 .back-btn:hover {
   background: rgba(255, 255, 255, 0.15);
   color: rgba(255, 255, 255, 0.7);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   LANDSCAPE LAYOUT — two-column: left panel | board
+   Trigger: aspect ratio wider than 4:3 (desktop, landscape phones/tablets)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@media (min-aspect-ratio: 4/3) {
+  .app {
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  /* ── Left panel: flex column, left side of the row ──────────────────────── */
+  .landscape-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    /* Takes all space not used by the board */
+    flex: 1 1 0;
+    min-width: 200px;
+    max-width: 560px;
+    overflow: hidden;
+    padding: calc(var(--space-2) + env(safe-area-inset-top, 0px))
+             var(--space-2)
+             calc(var(--space-2) + env(safe-area-inset-bottom, 0px))
+             calc(var(--space-2) + env(safe-area-inset-left, 0px));
+    gap: var(--space-2);
+    /* Subtle separator between panel and board */
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  /* Opponent banner: inline in panel flow in landscape (not fixed-position) */
+  .landscape-panel .opponent-banner {
+    position: static;
+    animation: banner-slide-in 250ms ease-out both;
+  }
+
+  /* Rack in the panel fills panel width, pushed to bottom */
+  .rack-area-panel {
+    display: flex;
+    width: 100%;
+    justify-content: stretch;
+    margin-top: auto;
+  }
+
+  .rack-area-panel .rack-wrapper {
+    width: 100%;
+    /* Tile size: fill panel content width at 7 tiles across.
+       100% = panel content width (panel padding already applied by .landscape-panel).
+       Subtract: rack internal padding L+R (8+8=16px) + 6 inter-tile gaps × 4px (24px) = 40px.
+       Extra 8px buffer for the rack-row's gap between .bag-count/.rack/.btn-icon. */
+    --tile-size: calc((100% - 48px) / 7);
+    --tile-thickness: 3px;
+  }
+
+  /* Portrait rack: hidden in landscape */
+  .rack-area-portrait {
+    display: none;
+  }
+
+  /* ── Board column (right) ────────────────────────────────────────────────── */
+  .board-area {
+    flex: 0 0 auto;
+    align-self: stretch;
+    height: 100dvh;
+    min-height: 0;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    /* Board tile size is set on :root in landscape via index.css.
+       Override locally to make the board column exactly board-sized. */
+  }
+
+  /* Board in landscape: no border-radius, no shadow — fills the column fully */
+  .board-area .board {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* Landscape score bar: full panel width */
+  .landscape-panel .score-bar {
+    width: 100%;
+  }
 }

@@ -986,6 +986,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       update.screen = 'playing';
     }
 
+    // Always sync player names — they're metadata, not turn state.
+    // This is the only way player 1 receives player 2's name when they join,
+    // since turnCount doesn't change on join and the guard below would skip it.
+    if (row.state.player1Name) update.player1Name = row.state.player1Name;
+    if (row.state.player2Name) update.player2Name = row.state.player2Name;
+
     // Apply opponent's committed turn (ignore our own echo via turnCount guard)
     if (row.state.turnCount > turnCount) {
       if (row.state.gameOver) {

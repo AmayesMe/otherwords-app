@@ -8,7 +8,7 @@ const ROW_SIZE = 7; // max tiles per rack row
 
 export function Rack() {
   const {
-    getCurrentRack, currentPlayer, recallAllTiles, moveRackTileToSlot,
+    getCurrentRack, currentPlayer, myRole, recallAllTiles, moveRackTileToSlot,
     placeTile, shuffleRack, endTurn, passTurn, turnError, isMyTurn, tileBag,
     currentTurnPlacements, bagClosed,
   } = useGameStore();
@@ -51,13 +51,13 @@ export function Rack() {
         {slot && (
           <Tile
             letter={slot.isWild ? '' : slot.letter}
-            owner={currentPlayer}
+            owner={myRole ?? currentPlayer}
             isWild={slot.isWild}
             onPointerDown={canPlay ? e => pointerDown(
               e,
               { type: 'rack', tileId: slot.id, slotIndex },
               slot.isWild ? '' : slot.letter,
-              currentPlayer,
+              myRole ?? currentPlayer,
             ) : undefined}
             onPointerMove={canPlay ? e => pointerMove(e) : undefined}
             onPointerUp={canPlay ? e => {

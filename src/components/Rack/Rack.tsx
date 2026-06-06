@@ -118,7 +118,10 @@ export function Rack() {
 
       {canPlay && turnError && <div className="turn-error">{turnError}</div>}
 
-      {canPlay && (confirmingPass ? (
+      {/* Pass confirmation replaces the buttons only during the local player's turn.
+          Turn controls use visibility:hidden (not conditional render) when not my turn
+          so the rack keeps a constant height and the board never shifts between states. */}
+      {canPlay && confirmingPass ? (
         <div className="pass-confirm">
           <span className="pass-confirm-text">Pass your turn?</span>
           <div className="pass-confirm-btns">
@@ -127,11 +130,11 @@ export function Rack() {
           </div>
         </div>
       ) : (
-        <div className="turn-controls">
+        <div className="turn-controls" style={{ visibility: canPlay ? 'visible' : 'hidden' }}>
           <button className="btn btn-secondary" onClick={recallAllTiles} disabled={!hasTilesPlaced}>Reset</button>
           <button className="btn btn-primary" onClick={handleEndTurn}>End Turn</button>
         </div>
-      ))}
+      )}
     </div>
   );
 }

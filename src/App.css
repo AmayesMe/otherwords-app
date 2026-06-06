@@ -27,11 +27,6 @@
   display: contents;
 }
 
-/* Portrait: the panel's rack is hidden; portrait rack is shown */
-.rack-area-panel {
-  display: none;
-}
-
 /* Portrait: portrait rack is shown normally */
 .rack-area-portrait {
   width: 100%;
@@ -151,6 +146,8 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  /* Containing block for the TurnReplayOverlay (position: absolute inside) */
+  position: relative;
 }
 
 @media (max-width: 600px) {
@@ -169,6 +166,13 @@
 .rack-area {
   display: flex;
   justify-content: center;
+}
+
+/* Portrait: the panel's rack is hidden; portrait rack is shown.
+   Must come AFTER the .rack-area base rule so the same-specificity
+   cascade correctly sets this to none (not overridden back to flex). */
+.rack-area-panel {
+  display: none;
 }
 
 /* Online: waiting-for-opponent banner */

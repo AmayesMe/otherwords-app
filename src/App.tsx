@@ -298,6 +298,16 @@ export default function App() {
       {/* ── Board — always present; right column in landscape ────────────────── */}
       <main className="board-area">
         <Board board={board} />
+
+        {/* Replay overlay sits inside board-area so it covers only the board —
+            board never shifts position, and score/rack stay visible throughout. */}
+        {replayMode === 'watching' && pendingReplay && (
+          <TurnReplayOverlay
+            replay={pendingReplay}
+            opponentName={opponentLabel}
+            onDone={dismissReplay}
+          />
+        )}
       </main>
 
       {/* ── Portrait rack — shown only in portrait, hidden in landscape ───────── */}
@@ -325,15 +335,6 @@ export default function App() {
           onClick={() => setShowResignConfirm(true)}
           title={gameId ? 'Resign / leave game' : 'Leave game'}
         >✕</button>
-      )}
-
-      {/* Replay overlay */}
-      {replayMode === 'watching' && pendingReplay && (
-        <TurnReplayOverlay
-          replay={pendingReplay}
-          opponentName={opponentLabel}
-          onDone={dismissReplay}
-        />
       )}
 
       {/* Game over screen */}

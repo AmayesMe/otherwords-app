@@ -1,35 +1,44 @@
-/* Full-screen overlay that sits on top of the game during replay.
-   Only the board lives in the flex flow so it stays perfectly centered
-   regardless of what header / done-row chrome appears around it. */
+/* Overlay scoped to .board-area so the board never shifts position
+   and the rack / score bar stay visible throughout the replay.
+   .board-area must have position: relative (see App.css). */
 .replay-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 50;
   background: rgba(0, 0, 0, 0.88);
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Slide in from the bottom */
-  animation: replay-enter 220ms ease-out both;
+  animation: replay-fade-in 180ms ease-out both;
 }
 
-@keyframes replay-enter {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes replay-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-/* Header row: pinned to top of overlay, never affects board position */
+/* Header row: pinned to top of overlay (= top of board-area).
+   In portrait, board-area is already below the safe-area padding in .app.
+   In landscape, board-area starts at the top of the viewport, so we add
+   env(safe-area-inset-top) only in the landscape media query below. */
 .replay-header {
   position: absolute;
-  top: calc(var(--space-3) + env(safe-area-inset-top, 0px));
+  top: var(--space-2);
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 2 * var(--space-2));
-  max-width: calc(13 * var(--tile-size) + 12 * var(--cell-gap) + 2 * var(--cell-gap));
+  max-width: calc(13 * var(--tile-size) + 14 * var(--cell-gap));
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 2px;
+}
+
+/* In landscape the board-area fills the full viewport height — add safe area */
+@media (min-aspect-ratio: 4/3) {
+  .replay-header {
+    top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
+  }
 }
 
 .replay-header-label {
@@ -57,16 +66,23 @@
 
 .replay-skip-btn:hover { color: rgba(255, 255, 255, 0.65); }
 
-/* Completion row: pinned to bottom of overlay, never affects board position */
+/* Completion row: pinned to bottom of overlay (= bottom of board-area) */
 .replay-done-row {
   position: absolute;
-  bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  bottom: var(--space-2);
   left: 0;
   right: 0;
   display: flex;
   justify-content: center;
   gap: 10px;
-  animation: replay-enter 200ms ease-out both;
+  animation: replay-fade-in 200ms ease-out both;
+}
+
+/* In landscape the board-area fills the full viewport height — add safe area */
+@media (min-aspect-ratio: 4/3) {
+  .replay-done-row {
+    bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .replay-done-btn {

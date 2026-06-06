@@ -242,54 +242,76 @@
 }
 
 .lobby-game-row {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 5px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 6px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 12px;
 }
 
-/* Left column */
-.lobby-game-left {
-  flex: 1;
+/* Applied when the card can be tapped to enter the game */
+.lobby-game-row-tappable {
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, transform 100ms ease;
+}
+.lobby-game-row-tappable:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.13);
+}
+.lobby-game-row-tappable:active {
+  background: rgba(255, 255, 255, 0.04);
+  transform: scale(0.99);
+}
+
+/* Resuming / loading state — dims card and blocks interaction */
+.lobby-game-row-loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ── Score tile row: P1 tiles — vs — P2 tiles ──────────────────────────── */
+
+.lobby-game-score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Override tile size locally — cards use mini tiles (22 px) */
+  --tile-size:      22px;
+  --tile-thickness: 2px;
+  --tile-radius:    2px;
+  /* Right padding leaves room for the absolutely-positioned × button */
+  padding-right: 22px;
+}
+
+.lobby-game-score-block {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  gap: 3px;
 }
 
-/* Player names + scores side by side */
-.lobby-game-matchup {
+.lobby-game-score-tiles {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  gap: 3px;
 }
 
-.lobby-game-player {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.lobby-game-player-name {
+.lobby-game-score-name {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 90px;
+  max-width: 80px;
 }
 
-.lobby-game-player-score {
-  font-family: var(--font-sans);
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1;
-  color: rgba(255, 255, 255, 0.9);
+.lobby-game-score-block-right .lobby-game-score-name {
+  text-align: right;
 }
 
 .lobby-game-vs {
@@ -323,6 +345,7 @@
   color: rgba(255, 185, 60, 0.85);
   animation: label-pulse 2.4s ease-in-out infinite;
 }
+.lobby-game-status-finished { color: rgba(255, 255, 255, 0.22); }
 .lobby-game-status-error   { color: rgba(255, 107, 107, 0.6); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -352,44 +375,28 @@
   margin-top: 1px;
 }
 
-/* Right column: buttons */
-.lobby-game-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.lobby-game-resume {
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.65);
-  border: none;
-  border-radius: 4px;
-  padding: 5px 10px;
-  cursor: pointer;
-  transition: background 150ms ease, opacity 150ms ease;
-}
-
-.lobby-game-resume:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
-.lobby-game-resume:disabled { opacity: 0.3; cursor: not-allowed; }
-
+/* Remove button — absolute top-right so it doesn't affect layout */
 .lobby-game-remove {
-  font-size: 16px;
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  font-size: 15px;
   line-height: 1;
   color: rgba(255, 255, 255, 0.18);
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0 2px;
-  transition: color 150ms ease;
+  padding: 3px 4px;
+  border-radius: 3px;
+  transition: color 150ms ease, background 150ms ease;
+  /* Never counts as a card tap */
+  z-index: 1;
 }
 
-.lobby-game-remove:hover { color: rgba(255, 255, 255, 0.5); }
+.lobby-game-remove:hover {
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+}
 
 .lobby-divider {
   width: 100%;

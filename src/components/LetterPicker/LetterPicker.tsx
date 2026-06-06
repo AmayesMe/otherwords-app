@@ -8,10 +8,14 @@ export function LetterPicker() {
 
   if (!pendingWildAssignment) return null;
 
+  const isRedesig = !!pendingWildAssignment.isRedesig;
+
   return (
     <div className="lp-overlay">
       <div className="lp-card">
-        <p className="lp-label">Choose a letter for your wild tile</p>
+        <p className="lp-label">
+          {isRedesig ? 'Re-designate this wild tile' : 'Choose a letter for your wild tile'}
+        </p>
         <div className="lp-grid">
           {LETTERS.map(letter => (
             <button
@@ -24,7 +28,7 @@ export function LetterPicker() {
           ))}
         </div>
         <button className="lp-cancel" onClick={cancelWildAssignment}>
-          Cancel — return tile to rack
+          {isRedesig ? 'Cancel' : 'Cancel — return tile to rack'}
         </button>
       </div>
     </div>

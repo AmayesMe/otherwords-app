@@ -1,0 +1,113 @@
+.game-over-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: go-fade-in 350ms ease-out both;
+}
+
+@keyframes go-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.game-over-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 48px var(--space-3) 40px;
+  max-width: 380px;
+  width: calc(100% - 2 * var(--space-2));
+  animation: go-slide-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 60ms;
+}
+
+@keyframes go-slide-up {
+  from { transform: translateY(28px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.game-over-headline {
+  font-family: var(--font-sans);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: center;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.game-over-subline {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  text-align: center;
+  margin: -12px 0 0;
+}
+
+/* Score display — mirrors the in-game score bar layout */
+.game-over-scores {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+}
+
+.game-over-score-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.35;
+  transition: opacity 300ms ease;
+}
+
+.game-over-score-col.is-winner {
+  opacity: 1;
+}
+
+.game-over-digits {
+  display: flex;
+  gap: 4px;
+}
+
+.game-over-name {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+}
+
+.game-over-score-col.is-winner .game-over-name {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.game-over-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 240px;
+}
+
+.game-over-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-over-overlay { animation: none; }
+  .game-over-card    { animation: none; }
+}

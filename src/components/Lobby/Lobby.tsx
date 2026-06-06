@@ -1,25 +1,35 @@
 import './Lobby.css';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { getGame } from '../../lib/gameSync';
+import { Tile } from '../Tile/Tile';
 import type { Player } from '../../game/types';
 import type { SavedGame } from '../../store/gameStore';
 
 type Mode = 'menu' | 'creating' | 'waiting' | 'joining';
 
-type GameStatusKind = 'loading' | 'your-turn' | 'their-turn' | 'waiting' | 'not-found';
+type GameStatusKind = 'loading' | 'your-turn' | 'their-turn' | 'waiting' | 'finished' | 'not-found';
 
 interface GameInfo {
   kind: GameStatusKind;
-  myScore: number;
-  theirScore: number;
-  myName: string;
-  theirName: string;
+  p1Score:  number;    // Player 1 always, regardless of which player I am
+  p2Score:  number;
+  p1Name:   string;
+  p2Name:   string;
   updatedAt: string;
   turnCount: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Same helper as App.tsx — 2 digits normally, 3 once score hits 100. */
+function scoreDigits(n: number): string[] {
+  const s = Math.min(Math.max(n, 0), 999);
+  if (s >= 100) {
+    return [String(Math.floor(s / 100)), String(Math.floor((s % 100) / 10)), String(s % 10)];
+  }
+  return [String(Math.floor(s / 10)), String(s % 10)];
+}
 
 function statusLabel(kind: GameStatusKind): string {
   switch (kind) {
@@ -27,6 +37,7 @@ function statusLabel(kind: GameStatusKind): string {
     case 'your-turn':  return 'Your turn';
     case 'their-turn': return 'Their turn';
     case 'waiting':    return 'Waiting for opponent';
+    case 'finished':   return 'Game over';
     case 'not-found':  return 'Game not found';
   }
 }
@@ -37,43 +48,80 @@ function statusClass(kind: GameStatusKind): string {
     case 'your-turn':  return `${b} lobby-game-status-yours`;
     case 'their-turn': return `${b} lobby-game-status-theirs`;
     case 'waiting':    return `${b} lobby-game-status-waiting`;
+    case 'finished':   return `${b} lobby-game-status-finished`;
     case 'not-found':  return `${b} lobby-game-status-error`;
     default:           return `${b} lobby-game-status-theirs`;
   }
 }
 
+/** Compact relative time: "just now", "4m ago", "2h ago", "3d ago" */
 function formatTimeSince(dateStr: string): string {
   if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
+  const diff  = Date.now() - new Date(dateStr).getTime();
   const mins  = Math.floor(diff / 60_000);
   const hours = Math.floor(diff / 3_600_000);
   const days  = Math.floor(diff / 86_400_000);
-  if (mins  < 1)  return 'just now';
-  if (mins  < 60) return `${mins} minute${mins  === 1 ? '' : 's'} ago`;
-  if (hours < 24) {
-    const rem = mins % 60;
-    return rem === 0
-      ? `${hours} hour${hours === 1 ? '' : 's'} ago`
-      : `${hours} hour${hours === 1 ? '' : 's'} and ${rem} minute${rem === 1 ? '' : 's'} ago`;
-  }
-  return `${days} day${days === 1 ? '' : 's'} ago`;
+  if (mins  < 1)   return 'just now';
+  if (mins  < 60)  return `${mins}m ago`;
+  if (hours < 24)  return `${hours}h ago`;
+  return `${days}d ago`;
 }
 
+/**
+ * Always returns P1/P2 in absolute terms so the display is consistent:
+ * Player 1 (the creator) scores appear on the left regardless of which player
+ * the viewer is.
+ */
 async function fetchGameInfo(game: SavedGame, localName: string): Promise<GameInfo> {
   const data = await getGame(game.gameId);
   if (!data) {
-    return { kind: 'not-found', myScore: 0, theirScore: 0, myName: localName || 'You', theirName: 'Opponent', updatedAt: '', turnCount: 0 };
+    return {
+      kind: 'not-found',
+      p1Score: 0, p2Score: 0,
+      p1Name: 'Player 1', p2Name: 'Player 2',
+      updatedAt: '', turnCount: 0,
+    };
   }
-  const isP1      = game.role === 'player1';
-  const myScore    = isP1 ? data.state.player1Score : data.state.player2Score;
-  const theirScore = isP1 ? data.state.player2Score : data.state.player1Score;
-  const myName     = (isP1 ? data.state.player1Name : data.state.player2Name) || localName || 'You';
-  const theirName  = (isP1 ? data.state.player2Name : data.state.player1Name) || 'Opponent';
+  // Scores are always P1 / P2 — never swapped based on viewer role.
+  const p1Score = data.state.player1Score;
+  const p2Score = data.state.player2Score;
+
+  // Prefer names from the server; fall back to local name for my own slot.
+  const p1Name = data.state.player1Name
+    || (game.role === 'player1' ? localName : '')
+    || 'Player 1';
+  const p2Name = data.state.player2Name
+    || (game.role === 'player2' ? localName : '')
+    || 'Player 2';
+
   let kind: GameStatusKind;
-  if (!data.player2_joined)                              kind = 'waiting';
-  else if (data.state.currentPlayer === game.role)       kind = 'your-turn';
-  else                                                   kind = 'their-turn';
-  return { kind, myScore, theirScore, myName, theirName, updatedAt: data.updated_at ?? '', turnCount: data.state.turnCount };
+  if (data.state.gameOver)                             kind = 'finished';
+  else if (!data.player2_joined)                       kind = 'waiting';
+  else if (data.state.currentPlayer === game.role)     kind = 'your-turn';
+  else                                                 kind = 'their-turn';
+
+  return { kind, p1Score, p2Score, p1Name, p2Name, updatedAt: data.updated_at ?? '', turnCount: data.state.turnCount };
+}
+
+// ── Score tile block ──────────────────────────────────────────────────────────
+
+interface ScoreBlockProps {
+  score: number;
+  owner: Player;
+  name: string;
+  align: 'left' | 'right';
+}
+
+function ScoreBlock({ score, owner, name, align }: ScoreBlockProps) {
+  const digits = scoreDigits(score);
+  return (
+    <div className={`lobby-game-score-block lobby-game-score-block-${align}`}>
+      <div className="lobby-game-score-tiles">
+        {digits.map((d, i) => <Tile key={i} letter={d} owner={owner} />)}
+      </div>
+      <span className="lobby-game-score-name">{name || '–'}</span>
+    </div>
+  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -93,9 +141,9 @@ export function Lobby() {
     gameId: storeGameId,
   } = useGameStore();
 
-  const [mode, setMode]         = useState<Mode>('menu');
-  const [gameCode, setGameCode] = useState('');
-  const [joinCode, setJoinCode] = useState('');
+  const [mode, setMode]             = useState<Mode>('menu');
+  const [gameCode, setGameCode]     = useState('');
+  const [joinCode, setJoinCode]     = useState('');
   const [isLoading, setIsLoading]   = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
   const [error, setError]           = useState<string | null>(null);
@@ -108,15 +156,17 @@ export function Lobby() {
     if (mode === 'joining') inputRef.current?.focus();
   }, [mode]);
 
-  // Fetch statuses + scores whenever the menu is shown
+  // Fetch status + scores whenever the menu is shown.
+  // Initial placeholder state uses loading kind so tiles show 00/00.
   useEffect(() => {
     if (mode !== 'menu' || savedGames.length === 0) return;
     setGameInfos(
       Object.fromEntries(
         savedGames.map(g => [g.gameId, {
           kind: 'loading' as GameStatusKind,
-          myScore: 0, theirScore: 0,
-          myName: myName || 'You', theirName: 'Opponent',
+          p1Score: 0, p2Score: 0,
+          p1Name: g.role === 'player1' ? (myName || 'You') : 'Player 1',
+          p2Name: g.role === 'player2' ? (myName || 'You') : 'Player 2',
           updatedAt: '', turnCount: 0,
         }])
       )
@@ -136,6 +186,19 @@ export function Lobby() {
       setMode('waiting');
     }
   }, [isWaitingForOpponent, storeGameId, mode]);
+
+  // Sort games by most-recent activity once we have updatedAt data.
+  // Games still loading stay in insertion order relative to each other.
+  const sortedGames = useMemo(() => {
+    return [...savedGames].sort((a, b) => {
+      const tA = gameInfos[a.gameId]?.updatedAt;
+      const tB = gameInfos[b.gameId]?.updatedAt;
+      if (!tA && !tB) return 0;
+      if (!tA) return 1;
+      if (!tB) return -1;
+      return new Date(tB).getTime() - new Date(tA).getTime();
+    });
+  }, [savedGames, gameInfos]);
 
   async function handleCreate() {
     setMode('creating');
@@ -213,65 +276,78 @@ export function Lobby() {
             </div>
 
             {/* Active games */}
-            {savedGames.length > 0 && (
+            {sortedGames.length > 0 && (
               <>
                 <p className="lobby-games-header">Your games</p>
                 <div className="lobby-games-list">
-                  {savedGames.map(game => {
-                    const info       = gameInfos[game.gameId];
-                    const kind       = info?.kind ?? 'loading';
-                    const isResuming = resumingId === game.gameId;
-                    const showTime   = kind === 'your-turn' && info?.turnCount > 0 && info?.updatedAt;
+                  {sortedGames.map(game => {
+                    const info        = gameInfos[game.gameId];
+                    const kind        = info?.kind ?? 'loading';
+                    const isResuming  = resumingId === game.gameId;
+                    const canTap      = kind !== 'not-found' && !isResuming;
+
+                    // Opponent name from viewer's perspective (for time message)
+                    const opponentName = game.role === 'player1' ? info?.p2Name : info?.p1Name;
+
+                    // Time sub-line copy depends on whose turn it is
+                    let timeStr: string | null = null;
+                    if (info?.updatedAt) {
+                      if (kind === 'your-turn' && info.turnCount > 0) {
+                        timeStr = `${opponentName ?? 'Opponent'} played ${formatTimeSince(info.updatedAt)}`;
+                      } else if (kind === 'their-turn') {
+                        timeStr = `You played ${formatTimeSince(info.updatedAt)}`;
+                      } else if (kind === 'finished') {
+                        timeStr = formatTimeSince(info.updatedAt);
+                      }
+                    }
+
                     return (
-                      <div key={game.gameId} className="lobby-game-row">
-                        <div className="lobby-game-left">
-                          {/* Player names + individual scores */}
-                          <div className="lobby-game-matchup">
-                            <span className="lobby-game-player">
-                              <span className="lobby-game-player-name">{info?.myName ?? '…'}</span>
-                              <span className="lobby-game-player-score">{info?.myScore ?? 0}</span>
-                            </span>
-                            <span className="lobby-game-vs">vs</span>
-                            <span className="lobby-game-player">
-                              <span className="lobby-game-player-score">{info?.theirScore ?? 0}</span>
-                              <span className="lobby-game-player-name">{info?.theirName ?? '…'}</span>
-                            </span>
-                          </div>
-
-                          {/* Status + time */}
-                          <div className="lobby-game-sub">
-                            <span className={statusClass(kind)}>{statusLabel(kind)}</span>
-                            {showTime && (
-                              <>
-                                <span className="lobby-game-sep">·</span>
-                                <span className="lobby-game-time">
-                                  {info.theirName} played {formatTimeSince(info.updatedAt)}
-                                </span>
-                              </>
-                            )}
-                          </div>
-
-                          {/* Game code — small, tertiary */}
-                          <span className="lobby-game-code-label">{game.gameId}</span>
+                      <div
+                        key={game.gameId}
+                        className={`lobby-game-row${canTap ? ' lobby-game-row-tappable' : ''}${isResuming ? ' lobby-game-row-loading' : ''}`}
+                        onClick={canTap ? () => handleResume(game) : undefined}
+                        role={canTap ? 'button' : undefined}
+                        tabIndex={canTap ? 0 : undefined}
+                        onKeyDown={canTap ? e => { if (e.key === 'Enter' || e.key === ' ') handleResume(game); } : undefined}
+                      >
+                        {/* ── Score tiles: P1 always left, P2 always right ── */}
+                        <div className="lobby-game-score-row">
+                          <ScoreBlock
+                            score={info?.p1Score ?? 0}
+                            owner="player1"
+                            name={info?.p1Name ?? ''}
+                            align="left"
+                          />
+                          <span className="lobby-game-vs">vs</span>
+                          <ScoreBlock
+                            score={info?.p2Score ?? 0}
+                            owner="player2"
+                            name={info?.p2Name ?? ''}
+                            align="right"
+                          />
                         </div>
 
-                        <div className="lobby-game-actions">
-                          <button
-                            className="lobby-game-resume"
-                            onClick={() => handleResume(game)}
-                            disabled={isResuming || kind === 'not-found'}
-                          >
-                            {isResuming ? '…' : 'Resume'}
-                          </button>
-                          <button
-                            className="lobby-game-remove"
-                            onClick={() => removeSavedGame(game.gameId)}
-                            title="Remove"
-                            aria-label="Remove"
-                          >
-                            ×
-                          </button>
+                        {/* ── Status + time ── */}
+                        <div className="lobby-game-sub">
+                          <span className={statusClass(kind)}>{statusLabel(kind)}</span>
+                          {timeStr && (
+                            <>
+                              <span className="lobby-game-sep">·</span>
+                              <span className="lobby-game-time">{timeStr}</span>
+                            </>
+                          )}
                         </div>
+
+                        {/* ── Game code — small, tertiary ── */}
+                        <span className="lobby-game-code-label">{game.gameId}</span>
+
+                        {/* ── Remove button — stops propagation so card doesn't activate ── */}
+                        <button
+                          className="lobby-game-remove"
+                          onClick={e => { e.stopPropagation(); removeSavedGame(game.gameId); }}
+                          title="Remove"
+                          aria-label="Remove"
+                        >×</button>
                       </div>
                     );
                   })}

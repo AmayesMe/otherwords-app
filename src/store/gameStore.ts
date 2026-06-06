@@ -3,7 +3,7 @@ import { createEmptyBoard, countScore } from '../game/boardUtils';
 import { validatePlacement } from '../game/turnUtils';
 import { extractNewWords, findConfiscatedCells } from '../game/wordUtils';
 import { loadDictionary, isValidWord } from '../game/dictionary';
-import { TILE_DISTRIBUTION, BLANK_TILE_COUNT, STARTING_RACK_SIZE } from '../game/config';
+import { TILE_DISTRIBUTION, BLANK_TILE_COUNT, STARTING_RACK_SIZE, MAX_RACK_SIZE, BOARD_WIDTH } from '../game/config';
 import { createGame, joinGame, pushState, subscribeToGame, getGame } from '../lib/gameSync';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { BoardState, Player, RackTile, TileData } from '../game/types';
@@ -41,6 +41,13 @@ export interface ReplayConfiscation {
   fromOwner: Player;
 }
 
+export interface GameOverState {
+  winner: Player | null;   // null = tie
+  reason: 'consecutive-passes' | 'rack-empty' | 'resignation';
+  player1Score: number;
+  player2Score: number;
+}
+
 /** A full record of one player's turn, used to animate the replay. */
 export interface TurnReplay {
   player: Player;
@@ -62,6 +69,10 @@ export interface SyncState {
   player1Name?: string;
   player2Name?: string;
   lastTurnReplay?: TurnReplay;
+  consecutivePassCount: number;
+  gameOver: GameOverState | null;
+  lastTurnWasPass?: boolean;
+  bagClosed: boolean;  // true once the bag runs dry — no more drawing
 }
 
 interface GameStore {
@@ -76,7 +87,12 @@ interface GameStore {
   tileBag: string[];
   turnCount: number;
   turnError: string | null;
-  pendingWildAssignment: { col: number; row: number } | null;
+  pendingWildAssignment: { col: number; row: number; isRedesig?: boolean } | null;
+  consecutivePassCount: number;
+  gameOver: GameOverState | null;
+  bagClosed: boolean;  // true once the shared bag empties — no more tile draws
+  // Tracks the original wildLetter for each redesignated cell this turn ("col,row" → original)
+  wildRedigs: Record<string, string>;
 
   // ── Multiplayer state ──────────────────────────────────────────────────────
   screen: 'lobby' | 'playing';
@@ -106,8 +122,11 @@ interface GameStore {
   moveRackTileToSlot: (tileId: string, fromIndex: number, toIndex: number) => void;
   shuffleRack: () => void;
   endTurn: () => void;
+  passTurn: () => void;
+  resign: () => void;
   assignWildLetter: (letter: string) => void;
   cancelWildAssignment: () => void;
+  beginWildRedesig: (col: number, row: number) => void;
 
   // ── Multiplayer actions ────────────────────────────────────────────────────
   startLocalGame: () => void;
@@ -195,6 +214,9 @@ function freshGameState(): Omit<SyncState, 'currentPlayer'> & { currentPlayer: P
     player2Score: 0,
     tileBag: p2Deal.bag,
     turnCount: 0,
+    consecutivePassCount: 0,
+    gameOver: null,
+    bagClosed: false,
   };
 }
 
@@ -210,6 +232,9 @@ function extractSyncState(s: GameStore): SyncState {
     turnCount: s.turnCount,
     player1Name: s.player1Name,
     player2Name: s.player2Name,
+    consecutivePassCount: s.consecutivePassCount,
+    gameOver: s.gameOver,
+    bagClosed: s.bagClosed,
   };
 }
 
@@ -228,6 +253,10 @@ function applySyncState(sync: SyncState): Partial<GameStore> {
     currentTurnPlacements: {},
     turnError: null,
     pendingWildAssignment: null,
+    consecutivePassCount: sync.consecutivePassCount ?? 0,
+    gameOver: sync.gameOver ?? null,
+    bagClosed: sync.bagClosed ?? false,
+    wildRedigs: {},
   };
 }
 
@@ -297,6 +326,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentTurnPlacements: {},
   turnError: null,
   pendingWildAssignment: null,
+  consecutivePassCount: 0,
+  gameOver: null,
+  wildRedigs: {},
 
   // Multiplayer
   screen: 'lobby',
@@ -343,6 +375,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const cell = state.board[row][col];
     const key = `${col},${row}`;
     const existingPlacement = state.currentTurnPlacements[key];
+
+    // ── Replacement guards ────────────────────────────────────────────────────
+    if (cell.tile) {
+      // Settled wild tiles can only be re-designated (tap them) — never physically replaced.
+      if (cell.tile.isWild && !existingPlacement) {
+        set({ turnError: "Wild tiles can't be replaced — tap to re-designate." });
+        return;
+      }
+      // Placing the same letter on a cell that already shows that letter is a no-op.
+      if (!rackTile.isWild && !cell.tile.isWild && cell.tile.letter === rackTile.letter) {
+        set({ turnError: "Can't place the same letter here." });
+        return;
+      }
+    }
 
     const newBoard: BoardState = state.board.map(r => r.map(c => ({ ...c })));
     newBoard[row][col] = {
@@ -447,7 +493,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newRack[placement.rackSlotIndex] = { id: placement.rackTileId, letter: placement.letter, isWild: placement.isWild };
     }
 
-    set({ board: newBoard, currentTurnPlacements: {}, pendingWildAssignment: null, turnError: null, ...setCurrentRack(state, newRack) });
+    // Revert any wild tile re-designations made this turn
+    for (const [key, originalLetter] of Object.entries(state.wildRedigs)) {
+      const [col, row] = key.split(',').map(Number);
+      const cell = newBoard[row][col];
+      if (cell.tile) {
+        newBoard[row][col] = { ...cell, tile: { ...cell.tile, wildLetter: originalLetter } };
+      }
+    }
+
+    set({ board: newBoard, currentTurnPlacements: {}, pendingWildAssignment: null, turnError: null, wildRedigs: {}, ...setCurrentRack(state, newRack) });
   },
 
   swapRackSlots(fromIndex, toIndex) {
@@ -493,10 +548,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   cancelWildAssignment() {
     const state = get();
-    const { pendingWildAssignment, currentTurnPlacements, board } = state;
+    const { pendingWildAssignment, currentTurnPlacements, board, wildRedigs } = state;
     if (!pendingWildAssignment) return;
-    const { col, row } = pendingWildAssignment;
+    const { col, row, isRedesig } = pendingWildAssignment;
     const key = `${col},${row}`;
+
+    if (isRedesig) {
+      // Re-designation: just close the picker without touching the board.
+      // beginWildRedesig doesn't change the board — only assignWildLetter does.
+      const newRedigs = { ...wildRedigs };
+      delete newRedigs[key];
+      set({ pendingWildAssignment: null, wildRedigs: newRedigs });
+      return;
+    }
+
+    // New placement: remove the tile and return it to the rack
     const placement = currentTurnPlacements[key];
     if (!placement) { set({ pendingWildAssignment: null }); return; }
     const cell = board[row][col];
@@ -509,9 +575,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ board: newBoard, currentTurnPlacements: newPlacements, pendingWildAssignment: null, turnError: null, ...setCurrentRack(state, newRack) });
   },
 
+  beginWildRedesig(col: number, row: number) {
+    const { board, wildRedigs, isMyTurn } = get();
+    if (!isMyTurn()) return;
+    const cell = board[row][col];
+    if (!cell.tile?.isWild) return;
+    const key = `${col},${row}`;
+    // Preserve the very first original letter so Reset Turn can always fully revert
+    const original = wildRedigs[key] ?? (cell.tile.wildLetter ?? '');
+    set({
+      pendingWildAssignment: { col, row, isRedesig: true },
+      wildRedigs: { ...wildRedigs, [key]: original },
+    });
+  },
+
   async endTurn() {
     const state = get();
-    const { board, currentTurnPlacements, currentPlayer, tileBag, turnCount, gameId } = state;
+    const { board, currentTurnPlacements, currentPlayer, tileBag, turnCount, gameId, bagClosed } = state;
 
     const result = validatePlacement(board, currentTurnPlacements, turnCount === 0);
     if (!result.valid) {
@@ -529,8 +609,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // Board Buster: any new word spanning the full board width or height earns +3 extra tiles.
+    const isBoardBuster = newWords.some(w => w.letters.length >= BOARD_WIDTH);
+
     const newBoard: BoardState = board.map(r => r.map(c => ({ ...c })));
-    let bonusTilesEarned = 0;
+    let bonusTilesEarned = isBoardBuster ? 3 : 0;
     for (const key of Object.keys(currentTurnPlacements)) {
       const [col, row] = key.split(',').map(Number);
       const cell = newBoard[row][col];
@@ -554,17 +637,50 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    const currentRack = getCurrentRackSlots(state);
-    const refilled = refillRack(currentRack, tileBag);
-
-    let finalRack: RackSlot[] = [...refilled.rack];
-    let finalBag = [...refilled.bag];
-    for (let i = 0; i < bonusTilesEarned; i++) {
-      if (finalBag.length > 0) {
-        const letter = finalBag.pop()!;
-        finalRack.push({ id: makeTileId(), letter, isWild: letter === '*' });
+    // Tiles displaced from the board this turn (replacements) must return to the bag.
+    const replacedLetters: string[] = [];
+    for (const placement of Object.values(currentTurnPlacements)) {
+      if (placement.replacedTile) {
+        replacedLetters.push(placement.replacedTile.isWild ? '*' : placement.replacedTile.letter);
       }
     }
+
+    const currentRack = getCurrentRackSlots(state);
+
+    let finalRack: RackSlot[];
+    let finalBag: string[];
+
+    if (bagClosed) {
+      // Bag is closed: compact the rack (remove null slots) but draw nothing.
+      // Replaced tiles leave play permanently — they're in the supply but can't be redrawn.
+      finalRack = currentRack.filter((s): s is RackTile => s !== null);
+      finalBag = [...tileBag]; // unchanged; replaced tiles exit the game
+    } else {
+      // Normal phase: shuffle replaced tiles back into the bag at random positions,
+      // then refill the rack to STARTING_RACK_SIZE, then draw any bonus tiles.
+      const bagWithReturned = [...tileBag];
+      for (const letter of replacedLetters) {
+        const pos = Math.floor(Math.random() * (bagWithReturned.length + 1));
+        bagWithReturned.splice(pos, 0, letter);
+      }
+      const refilled = refillRack(currentRack, bagWithReturned);
+      finalRack = [...refilled.rack];
+      finalBag = [...refilled.bag];
+
+      // Draw bonus tiles (Board Buster + bonus spaces) up to MAX_RACK_SIZE
+      const filledNow = finalRack.filter(s => s !== null).length;
+      const canDraw   = Math.max(0, MAX_RACK_SIZE - filledNow);
+      const toDraw    = Math.min(bonusTilesEarned, canDraw);
+      for (let i = 0; i < toDraw; i++) {
+        if (finalBag.length > 0) {
+          const letter = finalBag.pop()!;
+          finalRack.push({ id: makeTileId(), letter, isWild: letter === '*' });
+        }
+      }
+    }
+
+    // Bag closes the moment it runs dry after drawing
+    const newBagClosed = bagClosed || finalBag.length === 0;
 
     // Build boardBefore: revert placements from `board` (pre-bonus-processing)
     const boardBefore: BoardState = board.map(r => r.map(c => ({ ...c })));
@@ -591,6 +707,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ? { player1Rack: finalRack }
       : { player2Rack: finalRack };
 
+    // Game over if the active player emptied their rack (bag must be empty too —
+    // if the bag had tiles, refillRack would have filled them back up).
+    const rackIsEmpty = finalRack.every(slot => slot === null);
+    const gameOverState: GameOverState | null = rackIsEmpty ? {
+      winner: scores.player1 > scores.player2 ? 'player1'
+            : scores.player2 > scores.player1 ? 'player2'
+            : null,
+      reason: 'rack-empty',
+      player1Score: scores.player1,
+      player2Score: scores.player2,
+    } : null;
+
     set({
       board: newBoard,
       currentTurnPlacements: {},
@@ -600,6 +728,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       turnError: null,
       player1Score: scores.player1,
       player2Score: scores.player2,
+      consecutivePassCount: 0,   // valid turn resets pass streak
+      gameOver: gameOverState,
+      bagClosed: newBagClosed,
+      wildRedigs: {},            // redesigs committed — nothing to revert
       ...rackUpdate,
     });
 
@@ -608,6 +740,82 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const syncToSave: SyncState = { ...extractSyncState(get()), lastTurnReplay: replay };
       pushState(gameId, syncToSave).catch(() => {
         set({ syncError: 'Turn saved locally but failed to sync. Your opponent may not see it.' });
+      });
+    }
+  },
+
+  passTurn() {
+    const state = get();
+    const { currentTurnPlacements, currentPlayer, turnCount, consecutivePassCount, gameId,
+            player1Score, player2Score } = state;
+
+    // Recall any tiles the player may have placed before deciding to pass
+    const newBoard: BoardState = state.board.map(r => r.map(c => ({ ...c })));
+    const newRack = [...getCurrentRackSlots(state)];
+    for (const [key, placement] of Object.entries(currentTurnPlacements)) {
+      const [col, row] = key.split(',').map(Number);
+      newBoard[row][col] = { ...newBoard[row][col], tile: placement.replacedTile };
+      newRack[placement.rackSlotIndex] = {
+        id: placement.rackTileId,
+        letter: placement.letter,
+        isWild: placement.isWild,
+      };
+    }
+
+    const newPassCount = consecutivePassCount + 1;
+    const nextPlayer: Player = currentPlayer === 'player1' ? 'player2' : 'player1';
+
+    // Two consecutive passes ends the game
+    const gameOverState: GameOverState | null = newPassCount >= 2 ? {
+      winner: player1Score > player2Score ? 'player1'
+            : player2Score > player1Score ? 'player2'
+            : null,
+      reason: 'consecutive-passes',
+      player1Score,
+      player2Score,
+    } : null;
+
+    set({
+      board: newBoard,
+      currentTurnPlacements: {},
+      pendingWildAssignment: null,
+      turnError: null,
+      consecutivePassCount: newPassCount,
+      currentPlayer: nextPlayer,
+      turnCount: turnCount + 1,
+      gameOver: gameOverState,
+      ...setCurrentRack(state, newRack),
+    });
+
+    if (gameId) {
+      const syncToSave: SyncState = { ...extractSyncState(get()), lastTurnWasPass: true };
+      pushState(gameId, syncToSave).catch(() => {
+        set({ syncError: 'Pass saved locally but failed to sync.' });
+      });
+    }
+  },
+
+  resign() {
+    const state = get();
+    const { gameId, myRole, currentPlayer, player1Score, player2Score } = state;
+
+    // In online mode the resigning player is myRole; locally it's currentPlayer
+    const resigningPlayer: Player = (gameId && myRole) ? myRole : currentPlayer;
+    const winner: Player = resigningPlayer === 'player1' ? 'player2' : 'player1';
+
+    const gameOverState: GameOverState = {
+      winner,
+      reason: 'resignation',
+      player1Score,
+      player2Score,
+    };
+
+    set({ gameOver: gameOverState });
+
+    if (gameId) {
+      // Push so the opponent also sees the game-over screen
+      pushState(gameId, extractSyncState(get())).catch(() => {
+        set({ syncError: 'Resign failed to sync — opponent may not be notified.' });
       });
     }
   },
@@ -627,6 +835,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       myRole: null,
       isWaitingForOpponent: false,
       syncError: null,
+      pendingReplay: null,
+      replayMode: null,
+      pendingSync: null,
+      replayScore: null,
+      wildRedigs: {},
+      bagClosed: false,
     });
   },
 
@@ -774,16 +988,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Apply opponent's committed turn (ignore our own echo via turnCount guard)
     if (row.state.turnCount > turnCount) {
-      // Opponent played while our game screen is open and there's a replay to show —
-      // hold the new board state in pendingSync so the board doesn't jump to the
-      // post-turn result before the player has had a chance to watch the replay.
-      if (screen === 'playing' && row.state.lastTurnReplay && row.state.currentPlayer === myRole) {
+      if (row.state.gameOver) {
+        // Game ended — apply directly (no replay needed)
+        Object.assign(update, applySyncState(row.state));
+      } else if (!row.state.lastTurnWasPass && screen === 'playing'
+          && row.state.lastTurnReplay && row.state.currentPlayer === myRole) {
+        // Opponent played tiles while our game screen is open — hold state, show replay banner
         update.pendingReplay = row.state.lastTurnReplay;
         update.replayMode = 'banner';
         update.pendingSync = row.state;
       } else {
+        // Pass, or no replay data — apply immediately
         Object.assign(update, applySyncState(row.state));
       }
+    }
+
+    // Catch game-over pushed without a turn change (e.g. resignation arriving out of band)
+    if (row.state.gameOver && !get().gameOver) {
+      update.gameOver = row.state.gameOver;
     }
 
     if (Object.keys(update).length > 0) set(update as GameStore);
@@ -804,6 +1026,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       replayMode: null,
       pendingSync: null,
       replayScore: null,
+      consecutivePassCount: 0,
+      gameOver: null,
+      bagClosed: false,
+      wildRedigs: {},
     });
   },
 

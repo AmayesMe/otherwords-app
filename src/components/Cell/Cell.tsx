@@ -16,14 +16,22 @@ const BONUS_CLASS: Record<number, string>  = { 1: 'bonus-1', 2: 'bonus-2', 3: 'b
 
 export function Cell({ state, col, row, isCenter }: CellProps) {
   const { tile, bonus, bonusUsed } = state;
-  const { moveTile, recallTile, isCurrentTurnTile, currentPlayer } = useGameStore();
+  const { moveTile, recallTile, isCurrentTurnTile, currentPlayer, isMyTurn, beginWildRedesig } = useGameStore();
   const isThisTurn = isCurrentTurnTile(col, row);
   const showBonus = bonus && !tile && !bonusUsed;
   const showPip   = bonus && bonusUsed && tile;
 
+  // A settled wild tile on the board can be re-designated on any turn
+  const isSettledWild = !!(tile?.isWild && !isThisTurn);
+  const canRedesig    = isSettledWild && isMyTurn();
+
   function handleTileClick() {
-    if (shouldSuppressClick()) return; // ignore click fired after a drag gesture
-    if (isThisTurn) recallTile(col, row);
+    if (shouldSuppressClick()) return;
+    if (isThisTurn) {
+      recallTile(col, row);
+    } else if (canRedesig) {
+      beginWildRedesig(col, row);
+    }
   }
 
   return (
@@ -41,6 +49,7 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
           isWild={tile.isWild}
           owner={tile.owner}
           isNew={isThisTurn}
+          className={canRedesig ? 'tile-redesignable' : ''}
           onPointerDown={isThisTurn ? e => pointerDown(e, { type: 'board', col, row }, tile.wildLetter ?? tile.letter, currentPlayer) : undefined}
           onPointerMove={isThisTurn ? e => pointerMove(e) : undefined}
           onPointerUp={isThisTurn ? e => {
@@ -49,12 +58,10 @@ export function Cell({ state, col, row, isCenter }: CellProps) {
             const { source, target } = result;
             if (source.type !== 'board') return;
             if (target?.type === 'cell') {
-              // Dropped on a board cell
               if (target.col !== source.col || target.row !== source.row) {
                 moveTile(source.col, source.row, target.col, target.row);
               }
             } else {
-              // Dropped on rack or off-board — recall
               recallTile(source.col, source.row);
             }
           } : undefined}

@@ -6,6 +6,7 @@ import { LetterPicker } from './components/LetterPicker/LetterPicker';
 import { Lobby } from './components/Lobby/Lobby';
 import { Tile } from './components/Tile/Tile';
 import { TurnReplayOverlay } from './components/TurnReplay/TurnReplayOverlay';
+import { GameOverScreen } from './components/GameOver/GameOverScreen';
 import { useGameStore } from './store/gameStore';
 import { countScore } from './game/boardUtils';
 import { extractNewWords, findConfiscatedCells } from './game/wordUtils';
@@ -120,6 +121,8 @@ export default function App() {
     currentPlayer,
     player1Score,
     player2Score,
+    player1Rack,
+    player2Rack,
     currentTurnPlacements,
     myRole,
     myName,
@@ -130,12 +133,16 @@ export default function App() {
     isMyTurn,
     syncError,
     resetToLobby,
+    resign,
     pendingReplay,
     replayMode,
     watchReplay,
     dismissReplay,
     replayScore,
+    gameOver,
   } = useGameStore();
+
+  const [showResignConfirm, setShowResignConfirm] = useState(false);
 
   const projectedScore = useMemo(() => {
     if (Object.keys(currentTurnPlacements).length === 0) return null;
@@ -162,6 +169,11 @@ export default function App() {
   // Opponent's display name (used in replay banner/overlay)
   const opponentLabel = myRole === 'player1' ? p2Label : myRole === 'player2' ? p1Label : p2Label;
 
+  // Opponent tile count — only shown in online mode (local = pass-and-play, both visible)
+  const opponentTileCount = (gameId && myRole)
+    ? (myRole === 'player1' ? player2Rack : player1Rack).filter(s => s !== null).length
+    : null;
+
   // During replay, show the animated score rather than the held (pre-turn) store score
   const watching = replayMode === 'watching';
   const displayP1Score = watching && replayScore != null ? replayScore.player1 : player1Score;
@@ -177,7 +189,10 @@ export default function App() {
       */}
       <header className="score-bar">
         <span className={`score-label score-label-p1${currentPlayer === 'player1' ? ' score-label-active' : ''}`}>
-          {p1Label}
+          <span className="score-label-name">{p1Label}</span>
+          {opponentTileCount !== null && myRole === 'player2' && (
+            <span className="score-tile-count">{opponentTileCount} tiles</span>
+          )}
         </span>
 
         <AnimatedDigitCol
@@ -193,7 +208,10 @@ export default function App() {
         />
 
         <span className={`score-label score-label-p2${currentPlayer === 'player2' ? ' score-label-active' : ''}`}>
-          {p2Label}
+          <span className="score-label-name">{p2Label}</span>
+          {opponentTileCount !== null && myRole === 'player1' && (
+            <span className="score-tile-count">{opponentTileCount} tiles</span>
+          )}
         </span>
       </header>
 
@@ -241,8 +259,24 @@ export default function App() {
 
       <LetterPicker />
 
-      {gameId && (
-        <button className="back-btn" onClick={resetToLobby} title="Leave game">✕</button>
+      {/* Back/resign button — always shown in-game */}
+      {showResignConfirm ? (
+        <div className="resign-confirm">
+          <span className="resign-confirm-text">{gameId ? 'Resign?' : 'Leave game?'}</span>
+          <button
+            className="resign-confirm-yes"
+            onClick={() => { setShowResignConfirm(false); gameId ? resign() : resetToLobby(); }}
+          >
+            {gameId ? 'Resign' : 'Leave'}
+          </button>
+          <button className="resign-confirm-cancel" onClick={() => setShowResignConfirm(false)}>Cancel</button>
+        </div>
+      ) : (
+        <button
+          className="back-btn"
+          onClick={() => setShowResignConfirm(true)}
+          title={gameId ? 'Resign / leave game' : 'Leave game'}
+        >✕</button>
       )}
 
       {/* Replay overlay — full-screen animated board shown during replay */}
@@ -253,6 +287,9 @@ export default function App() {
           onDone={dismissReplay}
         />
       )}
+
+      {/* Game over screen — renders above everything */}
+      {gameOver && <GameOverScreen gameOver={gameOver} />}
     </div>
   );
 }

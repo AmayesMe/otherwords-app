@@ -5,6 +5,7 @@ export const BOARD_HEIGHT = 13;
 export const CENTER_COL = 6;
 export const CENTER_ROW = 6;
 export const STARTING_RACK_SIZE = 7;
+export const MAX_RACK_SIZE = 14;  // bonus tiles can push you up to 2× the starting size
 export const BLANK_TILE_COUNT = 2;
 
 export interface BonusSpaceConfig {

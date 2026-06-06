@@ -12,6 +12,8 @@
   transition: box-shadow 150ms ease;
   /* Prevent the browser hijacking touches as a scroll gesture during drag */
   touch-action: none;
+  /* Prevent Safari from treating the tile as a natively-draggable element */
+  -webkit-user-drag: none;
 }
 
 .tile-container.tile-new {
@@ -20,7 +22,11 @@
 
 .tile-container.tile-dragging {
   opacity: 0.25;
-  pointer-events: none;
+  /* pointer-events intentionally NOT set to none here — Safari drops pointer
+     capture when the captured element gets pointer-events:none, causing the
+     tile to get stuck in the dragging state. Leaving pointer-events active
+     is safe because drop detection uses e.clientX/Y → elementFromPoint, and
+     any tile hit still walks up to its parent cell via closest('[data-drop-col]'). */
 }
 
 /* Wild tile on the board that can be re-designated this turn */

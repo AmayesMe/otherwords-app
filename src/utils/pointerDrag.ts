@@ -63,10 +63,15 @@ export function pointerDown(
   owner: Player,
 ): void {
   if (active) return;
+  e.preventDefault();  // Prevent Safari from starting a native drag-and-drop on text content
   e.stopPropagation();
 
   const el = e.currentTarget as HTMLElement;
   el.setPointerCapture(e.pointerId); // route all future events here
+
+  // Safety net: if pointer capture is lost unexpectedly (Safari can break it),
+  // clean up so the tile doesn't stay stuck in the dragging state.
+  el.addEventListener('lostpointercapture', handleLostCapture, { once: true });
 
   // Ghost starts off-screen; repositioned in pointerMove once threshold crossed
   const ghost = createTileDragImage(letter, owner);
@@ -75,6 +80,14 @@ export function pointerDown(
   document.body.appendChild(ghost);
 
   active = { source, ghost, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, el };
+}
+
+/** Cleans up if pointer capture is dropped unexpectedly (Safari + pointer-events edge cases). */
+function handleLostCapture(): void {
+  if (!active) return;
+  active.el.classList.remove('tile-dragging');
+  active.ghost.remove();
+  active = null;
 }
 
 /** Track movement and reveal ghost after threshold. Call from onPointerMove. */
@@ -105,6 +118,7 @@ export function pointerUp(e: React.PointerEvent): DropResult | null {
   if (!active || e.pointerId !== active.pointerId) return null;
 
   const wasDrag = active.moved;
+  active.el.removeEventListener('lostpointercapture', handleLostCapture);
   active.el.classList.remove('tile-dragging');
   active.ghost.remove();
   const saved = active;
@@ -147,6 +161,7 @@ export function pointerUp(e: React.PointerEvent): DropResult | null {
 /** Cancel drag (OS interrupted — e.g. incoming call). Call from onPointerCancel. */
 export function pointerCancel(e: React.PointerEvent): void {
   if (!active || e.pointerId !== active.pointerId) return;
+  active.el.removeEventListener('lostpointercapture', handleLostCapture);
   active.el.classList.remove('tile-dragging');
   active.ghost.remove();
   active = null;

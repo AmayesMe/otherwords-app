@@ -7,6 +7,8 @@
   position: relative;
   border-radius: 2px;
   background-color: var(--color-board);
+  /* Prevent Safari from treating bonus-label text or the star as a native drag target */
+  -webkit-user-drag: none;
 }
 
 /* Center star */
@@ -15,6 +17,8 @@
   font-size: calc(var(--tile-size) * 0.44);
   line-height: 1;
   user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 /* Bonus spaces */
@@ -29,6 +33,8 @@
   letter-spacing: 0.04em;
   color: rgba(0, 0, 0, 0.45);
   user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .bonus-3 .bonus-label { color: rgba(255, 255, 255, 0.65); }

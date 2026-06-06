@@ -7,7 +7,10 @@ import { Lobby } from './components/Lobby/Lobby';
 import { Tile } from './components/Tile/Tile';
 import { TurnReplayOverlay } from './components/TurnReplay/TurnReplayOverlay';
 import { GameOverScreen } from './components/GameOver/GameOverScreen';
+import { AuthScreen } from './components/Auth/AuthScreen';
 import { useGameStore } from './store/gameStore';
+import { useAuth } from './hooks/useAuth';
+import { getDisplayName, hasDisplayName } from './lib/auth';
 import { countScore } from './game/boardUtils';
 import { extractNewWords, findConfiscatedCells } from './game/wordUtils';
 import type { Player } from './game/types';
@@ -115,6 +118,8 @@ function AnimatedDigitCol({ score, projected, owner }: DigitColProps) {
 }
 
 export default function App() {
+  const { user, loading: authLoading } = useAuth();
+
   const {
     screen,
     board,
@@ -144,6 +149,16 @@ export default function App() {
 
   const [showResignConfirm, setShowResignConfirm] = useState(false);
 
+  // Sync authenticated user's display name into the game store
+  useEffect(() => {
+    if (user) {
+      const name = getDisplayName(user);
+      if (name && name !== myName) {
+        useGameStore.setState({ myName: name });
+      }
+    }
+  }, [user, myName]);
+
   const projectedScore = useMemo(() => {
     if (Object.keys(currentTurnPlacements).length === 0) return null;
     const newWords = extractNewWords(board, currentTurnPlacements);
@@ -157,6 +172,18 @@ export default function App() {
     }
     return countScore(projBoard);
   }, [board, currentTurnPlacements, currentPlayer]);
+
+  // ── Auth gate ────────────────────────────────────────────────────────────
+  // Show nothing while the session resolves (avoids auth-screen flash on load)
+  if (authLoading) return <div className="auth-loading" />;
+
+  // Not signed in → auth screen
+  if (!user) return <AuthScreen />;
+
+  // Signed in but no display name yet (e.g. after Google OAuth) → name prompt
+  if (!hasDisplayName(user)) return <AuthScreen initialView="set-name" />;
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (screen === 'lobby') return <Lobby />;
 

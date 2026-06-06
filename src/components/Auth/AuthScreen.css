@@ -1,10 +1,14 @@
 .auth-screen {
-  height: 100dvh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
+  padding: max(var(--space-3), env(safe-area-inset-top, 24px))
+           max(var(--space-2), env(safe-area-inset-right, 16px))
+           max(var(--space-3), env(safe-area-inset-bottom, 24px))
+           max(var(--space-2), env(safe-area-inset-left, 16px));
   background-color: var(--color-bg);
+  overflow-y: auto;
 }
 
 .auth-card {

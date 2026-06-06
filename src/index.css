@@ -66,10 +66,13 @@
 }
 
 /* Landscape: tile size driven by viewport height — board right-column fills full height.
-   formula: (100dvh − 42px) / 13, capped at 70px for 4K screens. */
+   formula: (100dvh − 42px) / 13, capped at 70px for 4K screens.
+   --board-tile-size is stored separately so rack can reference it without
+   circular custom property dependency. */
 @media (min-aspect-ratio: 4/3) {
   :root {
-    --tile-size: min(calc((100dvh - 42px) / 13), 70px);
+    --board-tile-size: min(calc((100dvh - 42px) / 13), 70px);
+    --tile-size: var(--board-tile-size);
     --tile-thickness: 4px;
   }
 }

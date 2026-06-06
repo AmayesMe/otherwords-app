@@ -155,9 +155,11 @@
 
 @media (max-width: 600px) {
   /* Break out of the app's horizontal padding so the board sits edge-to-edge.
-     overflow:hidden on body ensures 100vw won't cause a scrollbar feedback loop. */
+     Use calc(100% + 2 * var(--space-2)) rather than 100vw so we never
+     accidentally include the scrollbar gutter that some desktop browsers
+     reserve even when overflow:hidden prevents a visible scrollbar. */
   .board-area {
-    width: 100vw;
+    width: calc(100% + 2 * var(--space-2));
     margin-left: calc(-1 * var(--space-2));
     overflow: hidden;
   }
@@ -361,7 +363,8 @@
   .app {
     flex-direction: row;
     align-items: stretch;
-    justify-content: flex-start;
+    /* Panel takes all space left of the board, board anchors to the right */
+    justify-content: space-between;
     padding: 0;
     gap: 0;
     overflow: hidden;
@@ -371,19 +374,26 @@
   .landscape-panel {
     display: flex;
     flex-direction: column;
-    align-items: stretch;
-    /* Takes all space not used by the board */
+    /* Panel items centered within the panel for very wide desktops */
+    align-items: center;
+    /* Takes all remaining space after the board */
     flex: 1 1 0;
     min-width: 200px;
-    max-width: 560px;
     overflow: hidden;
     padding: calc(var(--space-2) + env(safe-area-inset-top, 0px))
-             var(--space-2)
+             calc(var(--space-3) + env(safe-area-inset-right, 0px))
              calc(var(--space-2) + env(safe-area-inset-bottom, 0px))
-             calc(var(--space-2) + env(safe-area-inset-left, 0px));
+             calc(var(--space-3) + env(safe-area-inset-left, 0px));
     gap: var(--space-2);
     /* Subtle separator between panel and board */
     border-right: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  /* Constrain panel content to a comfortable reading width on large screens.
+     At 1920×1080, the panel is ~840px wide; content stays centered within it. */
+  .landscape-panel > * {
+    width: 100%;
+    max-width: 480px;
   }
 
   /* Opponent banner: inline in panel flow in landscape (not fixed-position) */
@@ -392,21 +402,25 @@
     animation: banner-slide-in 250ms ease-out both;
   }
 
-  /* Rack in the panel fills panel width, pushed to bottom */
+  /* Rack fills full panel content width (overrides the > * max-width constraint) */
   .rack-area-panel {
     display: flex;
     width: 100%;
-    justify-content: stretch;
+    max-width: none;  /* rack fills full panel width, not capped at 480px */
+    justify-content: center;
     margin-top: auto;
   }
 
   .rack-area-panel .rack-wrapper {
     width: 100%;
-    /* Tile size: fill panel content width at 7 tiles across.
+    /* Tile size: fill panel content width at 7 tiles across, capped to match
+       the board tile size so rack and board tiles stay visually proportional.
        100% = panel content width (panel padding already applied by .landscape-panel).
        Subtract: rack internal padding L+R (8+8=16px) + 6 inter-tile gaps × 4px (24px) = 40px.
-       Extra 8px buffer for the rack-row's gap between .bag-count/.rack/.btn-icon. */
-    --tile-size: calc((100% - 48px) / 7);
+       Extra 8px buffer to prevent overflow. Cap at board tile size (from :root). */
+    /* Fill panel width at 7 tiles across, capped at 70px (same as board cap).
+       100% = rack-wrapper width = panel content width. */
+    --tile-size: min(calc((100% - 48px) / 7), 70px);
     --tile-thickness: 3px;
   }
 
@@ -438,8 +452,6 @@
     box-shadow: none;
   }
 
-  /* Landscape score bar: full panel width */
-  .landscape-panel .score-bar {
-    width: 100%;
-  }
 }
+
+

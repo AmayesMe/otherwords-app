@@ -413,13 +413,9 @@
 
   .rack-area-panel .rack-wrapper {
     width: 100%;
-    /* Tile size: fill panel content width at 7 tiles across, capped to match
-       the board tile size so rack and board tiles stay visually proportional.
-       100% = panel content width (panel padding already applied by .landscape-panel).
-       Subtract: rack internal padding L+R (8+8=16px) + 6 inter-tile gaps × 4px (24px) = 40px.
-       Extra 8px buffer to prevent overflow. Cap at board tile size (from :root). */
-    /* Fill panel width at 7 tiles across, capped at 70px (same as board cap).
-       100% = rack-wrapper width = panel content width. */
+    /* Fill panel width at 7 tiles across, capped at 70px (same as board tile cap).
+       100% = rack-wrapper width = full panel content width (panel padding already subtracted).
+       48px = rack padding L+R (16px) + 6 inter-tile gaps × 4px (24px) + 8px buffer. */
     --tile-size: min(calc((100% - 48px) / 7), 70px);
     --tile-thickness: 3px;
   }

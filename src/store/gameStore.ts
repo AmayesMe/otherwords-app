@@ -1006,7 +1006,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   applyRemoteRow(row) {
-    const { isWaitingForOpponent, turnCount, myRole, screen } = get();
+    const { isWaitingForOpponent, turnCount, myRole, screen, pendingSync } = get();
     const update: Partial<GameStore> = {};
 
     // Player 1 sees opponent connect → start the game
@@ -1028,10 +1028,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         Object.assign(update, applySyncState(row.state));
       } else if (!row.state.lastTurnWasPass && screen === 'playing'
           && row.state.lastTurnReplay && row.state.currentPlayer === myRole) {
-        // Opponent played tiles while our game screen is open — hold state, show replay banner
-        update.pendingReplay = row.state.lastTurnReplay;
-        update.replayMode = 'banner';
-        update.pendingSync = row.state;
+        // Opponent played tiles while our game screen is open — hold state, show replay banner.
+        // Guard: if we already have this exact turn queued (poll/reconnect re-delivery while
+        // the replay is in progress), don't reset replayMode back to 'banner'.
+        if (pendingSync?.turnCount !== row.state.turnCount) {
+          update.pendingReplay = row.state.lastTurnReplay;
+          update.replayMode = 'banner';
+          update.pendingSync = row.state;
+        }
       } else {
         // Pass, or no replay data — apply immediately
         Object.assign(update, applySyncState(row.state));

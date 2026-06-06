@@ -2,6 +2,7 @@ import './Lobby.css';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { getGame } from '../../lib/gameSync';
+import { signOut } from '../../lib/auth';
 import { Tile } from '../Tile/Tile';
 import type { Player } from '../../game/types';
 import type { SavedGame } from '../../store/gameStore';
@@ -133,7 +134,6 @@ export function Lobby() {
     joinOnlineGame,
     resumeGame,
     removeSavedGame,
-    setPlayerName,
     startPlayingNow,
     savedGames,
     myName,
@@ -141,20 +141,43 @@ export function Lobby() {
     gameId: storeGameId,
   } = useGameStore();
 
-  const [mode, setMode]             = useState<Mode>('menu');
+  // Auto-detect invite code from URL: ?join=XXXXXX
+  const urlJoinCode = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('join')?.toUpperCase() ?? '';
+  }, []);
+
+  const [mode, setMode]             = useState<Mode>(urlJoinCode ? 'joining' : 'menu');
   const [gameCode, setGameCode]     = useState('');
-  const [joinCode, setJoinCode]     = useState('');
+  const [joinCode, setJoinCode]     = useState(urlJoinCode);
   const [isLoading, setIsLoading]   = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
   const [error, setError]           = useState<string | null>(null);
   const [gameInfos, setGameInfos]   = useState<Record<string, GameInfo>>({});
   const [copied, setCopied]         = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (mode === 'joining') inputRef.current?.focus();
   }, [mode]);
+
+  // Strip ?join= from the URL bar once it's been consumed, so a page refresh
+  // doesn't re-trigger the join flow after the game has already started.
+  useEffect(() => {
+    if (urlJoinCode) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('join');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try { await signOut(); } catch { /* ignore */ }
+    // onAuthStateChange in useAuth will handle clearing the session
+  }
 
   // Fetch status + scores whenever the menu is shown.
   // Initial placeholder state uses loading kind so tiles show 00/00.
@@ -247,9 +270,10 @@ export function Lobby() {
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(gameCode);
+      const inviteLink = `${window.location.origin}?join=${gameCode}`;
+      await navigator.clipboard.writeText(inviteLink);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 2500);
     } catch { /* silent */ }
   }
 
@@ -262,17 +286,17 @@ export function Lobby() {
         {mode === 'menu' && (
           <div className="lobby-section">
 
-            {/* Name field */}
+            {/* Name + sign out — name is locked to auth profile */}
             <div className="lobby-name-field">
-              <input
-                className="lobby-name-input"
-                value={myName}
-                onChange={e => setPlayerName(e.target.value)}
-                placeholder="Your name"
-                maxLength={15}
-                spellCheck={false}
-                autoComplete="off"
-              />
+              <span className="lobby-name-display">{myName || 'Player'}</span>
+              <button
+                className="lobby-signout-btn"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                title="Sign out"
+              >
+                {signingOut ? '…' : 'Sign out'}
+              </button>
             </div>
 
             {/* Active games */}
@@ -376,14 +400,14 @@ export function Lobby() {
         {/* ── Waiting for opponent ──────────────────────────────────── */}
         {mode === 'waiting' && (
           <div className="lobby-section lobby-centered">
-            <p className="lobby-hint">Share this code with your opponent</p>
+            <p className="lobby-hint">Invite your opponent</p>
             <div className="lobby-code-wrap">
               <div className="lobby-code">{gameCode}</div>
               <button
                 className={`lobby-code-copy${copied ? ' lobby-code-copy-done' : ''}`}
                 onClick={handleCopy}
-                aria-label="Copy code"
-                title="Copy code"
+                aria-label="Copy invite link"
+                title="Copy invite link"
               >
                 {copied ? (
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -397,6 +421,9 @@ export function Lobby() {
                 )}
               </button>
             </div>
+            <p className="lobby-hint-sm lobby-hint-link">
+              {copied ? 'Link copied!' : 'Tap the code to copy an invite link'}
+            </p>
             {isWaitingForOpponent ? (
               <>
                 <p className="lobby-hint">Waiting for opponent to join…</p>

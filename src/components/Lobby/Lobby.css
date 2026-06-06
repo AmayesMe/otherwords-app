@@ -191,34 +191,41 @@
 .lobby-name-field {
   width: 100%;
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 10px;
   margin-bottom: 24px;
 }
 
-.lobby-name-input {
+/* Authenticated display name — not editable */
+.lobby-name-display {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.4);
-  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.lobby-signout-btn {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.22);
+  background: none;
   border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 4px 2px;
-  text-align: center;
-  outline: none;
-  width: 180px;
-  transition: color 150ms ease, border-color 150ms ease;
+  padding: 2px 4px;
+  cursor: pointer;
+  transition: color 150ms ease;
 }
 
-.lobby-name-input:focus {
-  color: rgba(255, 255, 255, 0.8);
-  border-bottom-color: rgba(255, 255, 255, 0.28);
+.lobby-signout-btn:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.5);
 }
 
-.lobby-name-input::placeholder {
-  color: rgba(255, 255, 255, 0.18);
-  font-weight: 500;
+.lobby-signout-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* ── Game list ──────────────────────────────────────────────────────────── */
@@ -413,6 +420,10 @@
   color: rgba(255, 255, 255, 0.25);
   text-align: center;
   letter-spacing: 0.01em;
+}
+
+.lobby-hint-link {
+  margin-top: -4px;
 }
 
 /* Loading spinner */

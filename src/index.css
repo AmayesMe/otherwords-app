@@ -25,11 +25,11 @@
   --color-bg: #2E2E2E;
 
   /* Tile sizing — constrained by both width and height so board always fits viewport.
-     Divides by 14: 13 board rows + 1 rack row (both tile-size tall).
-     270px covers score bar, buttons, padding, gaps, and safe-area buffer. */
-  /* Divide by 15: 13 board rows + 1 rack row + 1 score-digit row.
-     260px covers labels, projected text, buttons, padding, gaps, and safe-area buffer. */
-  --tile-size:      min(clamp(28px, 4.6vw, 50px), calc((100dvh - 260px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 15));
+     Divide by 16: 13 board rows + 1 main rack row + 1 score-digit row + 1 overflow rack row.
+     300px covers score bar, online banner, buttons, padding, gaps, and safe-area buffer.
+     The overflow rack row only appears with >7 tiles (Board Buster bonus); the extra
+     divisor slot reserves space for it without clipping buttons when it shows up. */
+  --tile-size:      min(clamp(28px, 4.6vw, 50px), calc((100dvh - 300px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 16));
   /* Used by the projected-score tiles. Defined here (not on the child) to avoid
      a CSS custom-property circular reference. */
   --tile-size-half: calc(var(--tile-size) * 0.5);

@@ -34,10 +34,16 @@
   padding: 0 2px;
 }
 
-/* In landscape the board-area fills the full viewport height — add safe area */
 @media (min-aspect-ratio: 4/3) {
+  /* In landscape, float the header into the left panel so controls sit
+     alongside the score bar instead of over the board. */
   .replay-header {
+    position: fixed;
     top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
+    left: 0;
+    right: auto;
+    width: calc(100dvw - 13 * var(--board-tile-size) - 14 * var(--cell-gap));
+    transform: none;
   }
 }
 
@@ -66,7 +72,10 @@
 
 .replay-skip-btn:hover { color: rgba(255, 255, 255, 0.65); }
 
-/* Completion row: pinned to bottom of overlay (= bottom of board-area) */
+/* Completion row: pinned to bottom of overlay in portrait.
+   In landscape it escapes the board column and floats in the left panel
+   (position: fixed is not clipped by overflow:hidden on board-area as long
+   as no ancestor has a CSS transform / filter / will-change:transform). */
 .replay-done-row {
   position: absolute;
   bottom: var(--space-2);
@@ -78,10 +87,15 @@
   animation: replay-fade-in 200ms ease-out both;
 }
 
-/* In landscape the board-area fills the full viewport height — add safe area */
 @media (min-aspect-ratio: 4/3) {
+  /* Float done buttons into the left panel so they never overlap the board.
+     Left panel width = 100dvw − board column width (13 tiles + 14 gaps). */
   .replay-done-row {
-    bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+    position: fixed;
+    left: 0;
+    right: auto;
+    width: calc(100dvw - 13 * var(--board-tile-size) - 14 * var(--cell-gap));
+    bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
   }
 }
 

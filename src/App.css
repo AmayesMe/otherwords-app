@@ -419,9 +419,17 @@
   .rack-area-panel .rack-wrapper {
     width: 100%;
     /* Fill panel width at 7 tiles across, capped at 70px (same as board tile cap).
-       100% = rack-wrapper width = full panel content width (panel padding already subtracted).
-       48px = rack padding L+R (16px) + 6 inter-tile gaps × 4px (24px) + 8px buffer. */
-    --tile-size: min(calc((100% - 48px) / 7), 70px);
+       IMPORTANT: must use dvw (viewport units), NOT %, because % inside a CSS custom property
+       resolves relative to the element where var(--tile-size) is USED (the tile itself),
+       not where the property is SET (the rack-wrapper). Using % would make every tile
+       compute its own size as a fraction of itself — producing near-zero tiles.
+       Formula: panel-total = 100dvw - board-width (13 tiles + 42px gaps/padding)
+                panel-content = panel-total - 2 × var(--space-3) panel padding (48px)
+                rack-inner = rack L+R padding (16px) + 6 gaps × 4px (24px) + 8px buffer = 48px
+                tile = (panel-content - rack-inner) / 7
+                     = (100dvw - 13 × board-tile - 42px - 48px - 48px) / 7
+                     = (100dvw - 13 × var(--board-tile-size) - 138px) / 7 */
+    --tile-size: min(calc((100dvw - 13 * var(--board-tile-size) - 138px) / 7), 70px);
     --tile-thickness: 3px;
   }
 

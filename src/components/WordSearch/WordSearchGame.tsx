@@ -58,7 +58,8 @@ export function WordSearchGame() {
     puzzle, grid, placements, uniqueHiddenWords, gridSize, options,
     foundWordIndices, foundWordCells, revealedOriginalCells,
     bonusCells, bonusSelections, bonusPoints, hintsUsed, hintedLetters,
-    isSelecting, selectionCells, answerError, gameWon, startTime, endTime,
+    isSelecting, selectionCells, answerError, gameWon, startTime,
+    answerSubmitted, clueBonus, wordsRevealedAtAnswer, timeBonus, guessLockoutEnd,
     startPuzzle, startSelecting, updateSelection, endSelection,
     buyHint, submitAnswer, clearError,
   } = useWordSearchStore();
@@ -69,6 +70,8 @@ export function WordSearchGame() {
   const [localOptions, setLocalOptions] = useState<WordSearchOptions>({ ...DEFAULT_OPTIONS, ...options });
   const [started, setStarted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [lockoutSecsLeft, setLockoutSecsLeft] = useState(0);
+  const [showAnswerModal, setShowAnswerModal] = useState(false);
 
   // Fanfare & cell flash
   const [fanfareIdx, setFanfareIdx]         = useState<number | null>(null);
@@ -76,10 +79,11 @@ export function WordSearchGame() {
   const [hintRevealPos, setHintRevealPos]   = useState<{ wi: number; li: number } | null>(null);
 
   // Refs for change-detection
-  const gridRef              = useRef<HTMLDivElement>(null);
-  const errorTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevFoundIndicesRef  = useRef(new Set<number>());
-  const prevHintedLettersRef = useRef(new Map<number, Set<number>>());
+  const gridRef                  = useRef<HTMLDivElement>(null);
+  const errorTimerRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevFoundIndicesRef      = useRef(new Set<number>());
+  const prevHintedLettersRef     = useRef(new Map<number, Set<number>>());
+  const prevAnswerSubmittedRef   = useRef(false);
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -87,6 +91,25 @@ export function WordSearchGame() {
     const id = setInterval(() => setElapsed(Date.now() - startTime), 500);
     return () => clearInterval(id);
   }, [started, gameWon, startTime]);
+
+  // ── Lockout countdown ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!guessLockoutEnd) { setLockoutSecsLeft(0); return; }
+    const update = () => setLockoutSecsLeft(Math.max(0, Math.ceil((guessLockoutEnd - Date.now()) / 1000)));
+    update();
+    const id = setInterval(update, 200);
+    return () => clearInterval(id);
+  }, [guessLockoutEnd]);
+
+  // ── Correct answer transition ──────────────────────────────────────────────
+  useEffect(() => {
+    if (answerSubmitted && !prevAnswerSubmittedRef.current) {
+      setShowAnswerModal(true);
+      setAnswer('');
+      if (useWordSearchStore.getState().options.soundEnabled) sfxCorrectAnswer();
+    }
+    prevAnswerSubmittedRef.current = answerSubmitted;
+  }, [answerSubmitted]); // eslint-disable-line
 
   // ── Auto-hint: fires when accumulated points cover another hint cost ─────────
   useEffect(() => {
@@ -136,10 +159,7 @@ export function WordSearchGame() {
     return () => clearTimeout(cleanupTimer);
   }, [hintsUsed]); // eslint-disable-line
 
-  // ── Selection result sounds fired directly in handlePointerUp ────────────
-
-  // ── Answer sounds ──────────────────────────────────────────────────────────
-  useEffect(() => { if (gameWon && useWordSearchStore.getState().options.soundEnabled) sfxCorrectAnswer(); }, [gameWon]); // eslint-disable-line
+  // ── Wrong answer sound ─────────────────────────────────────────────────────
   useEffect(() => { if (answerError && useWordSearchStore.getState().options.soundEnabled) sfxWrongAnswer(); }, [answerError]); // eslint-disable-line
 
   // ── Error clear ────────────────────────────────────────────────────────────
@@ -151,7 +171,7 @@ export function WordSearchGame() {
   }
 
   // ── Derived display values ─────────────────────────────────────────────────
-  const available   = bonusPoints - hintsUsed * options.hintCost;
+  const available    = bonusPoints - hintsUsed * options.hintCost;
   const meterPercent = Math.min(100, Math.max(0, (available / options.hintCost) * 100));
 
   const selectedSet = new Set(selectionCells.map(c => cellKey(c.row, c.col)));
@@ -199,7 +219,6 @@ export function WordSearchGame() {
   function handlePointerUp(_e: React.PointerEvent) {
     if (!isSelecting) return;
     endSelection();
-    // Fire sounds immediately after endSelection (Zustand is sync, state is fresh)
     const s = useWordSearchStore.getState();
     if (s.options.soundEnabled) {
       const result = s.lastSelectionResult;
@@ -218,7 +237,7 @@ export function WordSearchGame() {
 
   function handleSubmit() {
     resumeAudio();
-    if (!answer.trim()) return;
+    if (!answer.trim() || lockoutSecsLeft > 0 || answerSubmitted) return;
     submitAnswer(answer);
   }
 
@@ -231,16 +250,19 @@ export function WordSearchGame() {
     setFanfareIdx(null);
     setJustFoundCells(new Set());
     setHintRevealPos(null);
-    prevFoundIndicesRef.current  = new Set();
-    prevHintedLettersRef.current = new Map();
+    setLockoutSecsLeft(0);
+    setShowAnswerModal(false);
+    prevFoundIndicesRef.current      = new Set();
+    prevHintedLettersRef.current     = new Map();
+    prevAnswerSubmittedRef.current   = false;
   }
 
   function handlePlayAgain() {
     resumeAudio();
     setStarted(false);
+    setShowAnswerModal(false);
   }
 
-  const finalTime  = endTime && startTime ? endTime - startTime : null;
   const isLoopMode = options.selectionMode === 'loop';
   const allFound   = foundWordIndices.size >= uniqueHiddenWords.length;
 
@@ -305,18 +327,6 @@ export function WordSearchGame() {
 
           <div className="ws-option-row">
             <label className="ws-option-label">
-              Require all words found
-              <span className="ws-option-desc">Must find every clue word before guessing the answer</span>
-            </label>
-            <button role="switch" aria-checked={localOptions.requireAllFound}
-              className={`ws-toggle ${localOptions.requireAllFound ? 'ws-toggle-on' : ''}`}
-              onClick={() => setLocalOptions(o => ({ ...o, requireAllFound: !o.requireAllFound }))}>
-              <span className="ws-toggle-thumb" />
-            </button>
-          </div>
-
-          <div className="ws-option-row">
-            <label className="ws-option-label">
               Puzzle types
               <span className="ws-option-desc">Which formats to include when selecting a puzzle</span>
             </label>
@@ -358,10 +368,6 @@ export function WordSearchGame() {
   }
 
   if (!puzzle || grid.length === 0) return null;
-
-  const foundCount = foundWordIndices.size;
-  const totalCount = uniqueHiddenWords.length;
-  const locked     = options.requireAllFound && !allFound;
 
   // ── Loop mode SVG overlay ─────────────────────────────────────────────────
   function renderLoopOverlay() {
@@ -428,6 +434,8 @@ export function WordSearchGame() {
     );
   }
 
+  const remainingCount = uniqueHiddenWords.length - foundWordIndices.size;
+
   // ── Game screen ───────────────────────────────────────────────────────────
   return (
     <div className="ws-container">
@@ -476,7 +484,10 @@ export function WordSearchGame() {
             })}
             <span className="ws-chain-item">
               <span className="ws-chain-arrow">→</span>
-              <span className="ws-chain-answer-mark">?</span>
+              {answerSubmitted
+                ? <span className="ws-chain-word ws-chain-word-found ws-clue-word-fanfare">{puzzle.answer.toUpperCase()}</span>
+                : <span className="ws-chain-answer-mark">?</span>
+              }
             </span>
           </div>
         ) : (
@@ -516,26 +527,36 @@ export function WordSearchGame() {
           </div>
         )}
 
-        {/* Answer */}
-        <div className="ws-answer-area">
-          <div className="ws-answer-row">
-            <input
-              className={`ws-answer-input ${answerError ? 'ws-answer-error' : ''}`}
-              type="text"
-              placeholder={locked ? `Find all words first (${foundCount}/${totalCount})` : 'Your answer…'}
-              value={answer}
-              onChange={e => setAnswer(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !locked && handleSubmit()}
-              disabled={locked}
-              autoCorrect="off"
-              autoCapitalize="words"
-              spellCheck={false}
-            />
-            <button className="ws-submit-btn" onClick={handleSubmit} disabled={!answer.trim() || locked}>
-              Guess
-            </button>
+        {/* Answer area: input before answering, status after */}
+        {!answerSubmitted ? (
+          <div className="ws-answer-area">
+            <div className="ws-answer-row">
+              <input
+                className={`ws-answer-input ${answerError ? 'ws-answer-error' : ''}`}
+                type="text"
+                placeholder="Your answer…"
+                value={answer}
+                onChange={e => setAnswer(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !lockoutSecsLeft && handleSubmit()}
+                disabled={lockoutSecsLeft > 0}
+                autoCorrect="off"
+                autoCapitalize="words"
+                spellCheck={false}
+              />
+              <button
+                className={`ws-submit-btn${lockoutSecsLeft > 0 ? ' ws-submit-btn-locked' : ''}`}
+                onClick={handleSubmit}
+                disabled={lockoutSecsLeft === 0 && !answer.trim()}
+              >
+                {lockoutSecsLeft > 0 ? `Locked ${lockoutSecsLeft}…` : 'Guess'}
+              </button>
+            </div>
           </div>
-        </div>
+        ) : !allFound ? (
+          <div className="ws-find-remaining">
+            Find {remainingCount} remaining word{remainingCount !== 1 ? 's' : ''}!
+          </div>
+        ) : null}
 
         {/* Grid */}
         <div className="ws-grid-wrap">
@@ -587,11 +608,45 @@ export function WordSearchGame() {
 
       </div>
 
-      {gameWon && (
+      {/* Correct answer modal — shown after answer is submitted, before all words found */}
+      {answerSubmitted && !gameWon && showAnswerModal && (
         <div className="ws-win">
           <div className="ws-win-title">Correct!</div>
           <div className="ws-win-answer">{puzzle.answer}</div>
-          {finalTime !== null && <div className="ws-win-time">Time: {formatTime(finalTime)}</div>}
+          {clueBonus === 0 ? (
+            <p className="ws-win-subtitle">
+              You revealed all {uniqueHiddenWords.length} clue words before answering — no clue bonus.
+            </p>
+          ) : (
+            <p className="ws-win-subtitle">
+              You answered with only {wordsRevealedAtAnswer} of {uniqueHiddenWords.length} words revealed,
+              earning <strong>{clueBonus}</strong> clue bonus points!
+            </p>
+          )}
+          <p className="ws-win-subtitle">Now find the remaining clue words to earn your time bonus — go fast!</p>
+          <button className="ws-win-btn" onClick={() => setShowAnswerModal(false)}>Continue</button>
+        </div>
+      )}
+
+      {/* Final score overlay */}
+      {gameWon && (
+        <div className="ws-win">
+          <div className="ws-win-title">Complete!</div>
+          <div className="ws-win-answer">{puzzle.answer}</div>
+          <div className="ws-score-breakdown">
+            <div className="ws-score-row">
+              <span>Clue Bonus</span>
+              <span>{clueBonus ?? 0}</span>
+            </div>
+            <div className="ws-score-row">
+              <span>Time Bonus</span>
+              <span>{timeBonus ?? 0}</span>
+            </div>
+            <div className="ws-score-row ws-score-total">
+              <span>Total</span>
+              <span>{(clueBonus ?? 0) + (timeBonus ?? 0)}</span>
+            </div>
+          </div>
           <button className="ws-win-btn" onClick={handlePlayAgain}>Play Again</button>
           <button className="ws-win-btn" onClick={resetToLobby}>Back to Menu</button>
         </div>

@@ -11,7 +11,6 @@ export interface WordSearchOptions {
   gridSize: number;
   hintCost: number;
   selectionMode: 'block' | 'loop';
-  requireAllFound: boolean;
   soundEnabled: boolean;
   puzzleTypes: PuzzleType[];
 }
@@ -21,13 +20,18 @@ export const DEFAULT_OPTIONS: WordSearchOptions = {
   gridSize: 10,
   hintCost: 10,
   selectionMode: 'loop',
-  requireAllFound: false,
   soundEnabled: true,
   puzzleTypes: ['crossword', 'chain'],
 };
 
 function pathKey(cells: CellCoord[]) {
   return cells.map(c => `${c.row},${c.col}`).join(':');
+}
+
+// Starts at 1000 pts, decays to 0 at 1200 seconds (20 min)
+function computeTimeBonus(startTime: number | null): number {
+  const elapsedSec = startTime ? (Date.now() - startTime) / 1000 : 0;
+  return Math.max(0, Math.round(1000 * Math.max(0, 1 - elapsedSec / 1200)));
 }
 
 interface WordSearchState {
@@ -39,8 +43,8 @@ interface WordSearchState {
   options: WordSearchOptions;
 
   foundWordIndices: Set<number>;
-  foundWordCells: Map<number, CellCoord[]>;   // actual cells player selected when finding word wi
-  revealedOriginalCells: Set<number>;          // cellKeys of original placements found after the fact
+  foundWordCells: Map<number, CellCoord[]>;
+  revealedOriginalCells: Set<number>;
   bonusCells: Set<number>;
   lastSelectionResult: 'word' | 'bonus' | 'original' | 'nothing' | null;
   selectionCount: number;
@@ -59,6 +63,12 @@ interface WordSearchState {
 
   answerError: boolean;
   gameWon: boolean;
+
+  answerSubmitted: boolean;
+  clueBonus: number | null;
+  wordsRevealedAtAnswer: number;
+  timeBonus: number | null;
+  guessLockoutEnd: number | null;
 
   startPuzzle: (puzzle?: Puzzle, options?: WordSearchOptions) => void;
   startSelecting: (row: number, col: number) => void;
@@ -125,6 +135,11 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   endTime: null,
   answerError: false,
   gameWon: false,
+  answerSubmitted: false,
+  clueBonus: null,
+  wordsRevealedAtAnswer: 0,
+  timeBonus: null,
+  guessLockoutEnd: null,
 
   startPuzzle(puzzle, options) {
     const opts = options ?? get().options;
@@ -156,6 +171,11 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       endTime: null,
       answerError: false,
       gameWon: false,
+      answerSubmitted: false,
+      clueBonus: null,
+      wordsRevealedAtAnswer: 0,
+      timeBonus: null,
+      guessLockoutEnd: null,
     });
   },
 
@@ -175,6 +195,7 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       selectionCells, placements, foundWordIndices, foundWordCells,
       grid, uniqueHiddenWords, bonusCells, foundBonusPaths, bonusPoints,
       options, bonusSelections, revealedOriginalCells, selectionCount,
+      answerSubmitted, startTime,
     } = get();
 
     if (selectionCells.length < 2) {
@@ -194,10 +215,8 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
     const extracted = selectionCells.map(c => grid[c.row][c.col]).join('');
     const extractedRev = allowBackward ? extracted.split('').reverse().join('') : '';
 
-    // 1. Exact placement cell match
     let clueMatchIndex = findMatchingPlacement(selectionCells, placements, newFoundWordIndices, allowBackward);
 
-    // 2. String match anywhere in grid
     if (clueMatchIndex === null) {
       for (let wi = 0; wi < uniqueHiddenWords.length; wi++) {
         if (newFoundWordIndices.has(wi)) continue;
@@ -223,8 +242,6 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       }
       selectionResult = 'word';
     } else {
-      // Check if this selection lands on the original placement of an already-found word
-      // (found at a different location) — mark those cells as gray "also-found"
       for (const p of placements) {
         if (!newFoundWordIndices.has(p.wordIndex)) continue;
         const actual = newFoundWordCells.get(p.wordIndex);
@@ -245,7 +262,6 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
         }
       }
 
-      // Bonus words require 3+ letters
       if (!newFoundBonusPaths.has(key) && selectionCells.length >= 3) {
         const dictWord = extracted.toLowerCase();
         const dictWordRev = allowBackward ? extractedRev.toLowerCase() : '';
@@ -261,6 +277,11 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       if (selectionResult === 'nothing' && originalFound) selectionResult = 'original';
     }
 
+    let winExtra: Partial<WordSearchState> = {};
+    if (answerSubmitted && newFoundWordIndices.size >= uniqueHiddenWords.length) {
+      winExtra = { gameWon: true, endTime: Date.now(), timeBonus: computeTimeBonus(startTime) };
+    }
+
     set({
       isSelecting: false,
       selectionCells: [],
@@ -273,12 +294,13 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       bonusSelections: newBonusSelections,
       lastSelectionResult: selectionResult,
       selectionCount: selectionCount + 1,
+      ...winExtra,
     });
   },
 
   buyHint() {
     const { bonusPoints, hintsUsed, hintedLetters, uniqueHiddenWords,
-            foundWordIndices, options } = get();
+            foundWordIndices, options, answerSubmitted, startTime } = get();
     const available = bonusPoints - hintsUsed * options.hintCost;
     if (available < options.hintCost) return;
 
@@ -305,16 +327,34 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       newFoundWordIndices.add(pick.wordIndex);
     }
 
+    let winExtra: Partial<WordSearchState> = {};
+    if (answerSubmitted && newFoundWordIndices.size >= uniqueHiddenWords.length) {
+      winExtra = { gameWon: true, endTime: Date.now(), timeBonus: computeTimeBonus(startTime) };
+    }
+
     set({ hintsUsed: hintsUsed + 1, hintedLetters: newHintedLetters,
-          foundWordIndices: newFoundWordIndices });
+          foundWordIndices: newFoundWordIndices, ...winExtra });
   },
 
   submitAnswer(answer) {
-    const { puzzle } = get();
-    if (!puzzle) return;
+    const { puzzle, foundWordIndices, uniqueHiddenWords, startTime, guessLockoutEnd, answerSubmitted } = get();
+    if (!puzzle || answerSubmitted) return;
+    if (guessLockoutEnd !== null && Date.now() < guessLockoutEnd) return;
+
     const correct = answer.trim().toLowerCase() === puzzle.answer.trim().toLowerCase();
-    if (correct) set({ gameWon: true, endTime: Date.now() });
-    else set({ answerError: true });
+    if (correct) {
+      const K = foundWordIndices.size;
+      const N = uniqueHiddenWords.length;
+      const clueBonus = N > 0 ? Math.round(1000 * (N - K) / N) : 0;
+      if (K >= N) {
+        set({ answerSubmitted: true, clueBonus, wordsRevealedAtAnswer: K,
+              gameWon: true, endTime: Date.now(), timeBonus: computeTimeBonus(startTime) });
+      } else {
+        set({ answerSubmitted: true, clueBonus, wordsRevealedAtAnswer: K });
+      }
+    } else {
+      set({ answerError: true, guessLockoutEnd: Date.now() + 10000 });
+    }
   },
 
   clearError() {

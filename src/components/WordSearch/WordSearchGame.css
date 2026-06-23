@@ -400,6 +400,14 @@
   cursor: default;
 }
 
+.ws-submit-btn-locked {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  cursor: default;
+  letter-spacing: 0.02em;
+}
+
 /* ── Options screen ──────────────────────────────────────────────────────── */
 
 .ws-options {
@@ -652,6 +660,63 @@
 
 .ws-win-btn:hover {
   opacity: 0.85;
+}
+
+.ws-win-subtitle {
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  text-align: center;
+  max-width: 300px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.ws-win-subtitle strong {
+  color: #a8f0be;
+  font-weight: 700;
+}
+
+/* ── Score breakdown (final overlay) ────────────────────────────────────── */
+
+.ws-score-breakdown {
+  width: 100%;
+  max-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ws-score-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ws-score-total {
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 800;
+  border-bottom: none;
+  padding-top: 14px;
+  margin-top: 4px;
+}
+
+/* ── Phase 2 "find remaining" banner ────────────────────────────────────── */
+
+.ws-find-remaining {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e8b830;
+  text-align: center;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 0;
 }
 
 /* ── Container ───────────────────────────────────────────────────────────── */

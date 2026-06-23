@@ -311,6 +311,7 @@ export function WordSearchGame() {
   if (!started) {
     return (
       <div className="ws-container">
+        <span className="ws-build-ver">{__BUILD_TS__}</span>
         <div className="ws-options">
           <button className="ws-back-btn ws-options-back" onClick={resetToLobby}>✕</button>
           <h2 className="ws-options-title">Word Search</h2>
@@ -469,6 +470,7 @@ export function WordSearchGame() {
   // ── Game screen ───────────────────────────────────────────────────────────
   return (
     <div className="ws-container">
+      <span className="ws-build-ver">{__BUILD_TS__}</span>
       <div className="ws-game">
 
         <div className="ws-header">

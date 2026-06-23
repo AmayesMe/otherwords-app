@@ -1,5 +1,17 @@
 /* ── Word Search Game ─────────────────────────────────────────────────────── */
 
+.ws-build-ver {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 9px;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 10;
+  color: #fff;
+  font-family: monospace;
+}
+
 .ws-game {
   display: flex;
   flex-direction: column;

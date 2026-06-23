@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useWordSearchStore, HINT_COST } from '../../store/wordSearchStore';
 import { useGameStore } from '../../store/gameStore';
 import { GRID_SIZE } from '../../wordSearch/gridGenerator';
+import type { WordSearchOptions } from '../../store/wordSearchStore';
 
 function cellKey(row: number, col: number) {
   return row * GRID_SIZE + col;
@@ -35,11 +36,14 @@ export function WordSearchGame() {
   const resetToLobby = useGameStore(s => s.resetToLobby);
 
   const [answer, setAnswer] = useState('');
+  const [options, setOptions] = useState<WordSearchOptions>({ allowBackward: false });
+  const [started, setStarted] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    startPuzzle();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  function handleStart() {
+    startPuzzle(undefined, options);
+    setStarted(true);
+  }
 
   useEffect(() => {
     if (!answerError) return;
@@ -101,7 +105,37 @@ export function WordSearchGame() {
 
   function handlePlayAgain() {
     setAnswer('');
-    startPuzzle();
+    setStarted(false);
+  }
+
+  // Options screen
+  if (!started) {
+    return (
+      <div className="ws-container">
+        <div className="ws-options">
+          <button className="ws-back-btn ws-options-back" onClick={resetToLobby}>✕</button>
+          <h2 className="ws-options-title">Word Search</h2>
+
+          <div className="ws-option-row">
+            <label className="ws-option-label" htmlFor="ws-backward">
+              Allow backward words
+              <span className="ws-option-desc">Words can be placed in any direction, including reversed</span>
+            </label>
+            <button
+              id="ws-backward"
+              role="switch"
+              aria-checked={options.allowBackward}
+              className={`ws-toggle ${options.allowBackward ? 'ws-toggle-on' : ''}`}
+              onClick={() => setOptions(o => ({ ...o, allowBackward: !o.allowBackward }))}
+            >
+              <span className="ws-toggle-thumb" />
+            </button>
+          </div>
+
+          <button className="ws-start-btn" onClick={handleStart}>Play</button>
+        </div>
+      </div>
+    );
   }
 
   if (!puzzle || grid.length === 0) return null;

@@ -17,12 +17,17 @@ function pathKey(cells: CellCoord[]) {
   return cells.map(c => `${c.row},${c.col}`).join(':');
 }
 
+export interface WordSearchOptions {
+  allowBackward: boolean;
+}
+
 interface WordSearchState {
   puzzle: Puzzle | null;
   grid: string[][];
   placements: WordPlacement[];
   uniqueHiddenWords: string[];
   gridSize: number;
+  options: WordSearchOptions;
 
   foundWordIndices: Set<number>;
 
@@ -43,7 +48,7 @@ interface WordSearchState {
   answerError: boolean;
   gameWon: boolean;
 
-  startPuzzle: (puzzle?: Puzzle) => void;
+  startPuzzle: (puzzle?: Puzzle, options?: WordSearchOptions) => void;
   startSelecting: (row: number, col: number) => void;
   updateSelection: (row: number, col: number) => void;
   endSelection: () => void;
@@ -86,6 +91,7 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   placements: [],
   uniqueHiddenWords: [],
   gridSize: GRID_SIZE,
+  options: { allowBackward: false },
   foundWordIndices: new Set(),
   bonusCells: new Set(),
   foundBonusPaths: new Set(),
@@ -98,12 +104,14 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   answerError: false,
   gameWon: false,
 
-  startPuzzle(puzzle) {
+  startPuzzle(puzzle, options) {
     const p = puzzle ?? randomPuzzle();
+    const opts = options ?? get().options;
     const uniqueHiddenWords = getUniqueHiddenWords(p.clueWords);
-    const { grid, placements } = generateGrid(uniqueHiddenWords);
+    const { grid, placements } = generateGrid(uniqueHiddenWords, opts.allowBackward);
     set({
       puzzle: p,
+      options: opts,
       grid,
       placements,
       uniqueHiddenWords,

@@ -1,6 +1,6 @@
 import type { CellCoord, WordPlacement } from './types';
 
-const DIRECTIONS = [
+const DIRECTIONS_ALL = [
   { stepRow: 0,  stepCol: 1  }, // right
   { stepRow: 0,  stepCol: -1 }, // left
   { stepRow: 1,  stepCol: 0  }, // down
@@ -10,6 +10,11 @@ const DIRECTIONS = [
   { stepRow: -1, stepCol: 1  }, // up-right
   { stepRow: -1, stepCol: -1 }, // up-left
 ];
+
+// Forward-only: left→right, top→bottom, and both forward diagonals
+const DIRECTIONS_FORWARD = DIRECTIONS_ALL.filter(
+  d => d.stepRow > 0 || (d.stepRow === 0 && d.stepCol > 0),
+);
 
 const FILL_LETTERS = 'ABCDEFGHIKLMNOPRSTUW';
 
@@ -60,10 +65,11 @@ function rand(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
-export function generateGrid(uniqueWords: string[]): {
+export function generateGrid(uniqueWords: string[], allowBackward = false): {
   grid: string[][];
   placements: WordPlacement[];
 } {
+  const DIRECTIONS = allowBackward ? DIRECTIONS_ALL : DIRECTIONS_FORWARD;
   const grid: string[][] = Array.from({ length: GRID_SIZE }, () =>
     Array(GRID_SIZE).fill(''),
   );

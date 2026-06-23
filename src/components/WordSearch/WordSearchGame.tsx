@@ -72,6 +72,8 @@ export function WordSearchGame() {
   const [elapsed, setElapsed] = useState(0);
   const [lockoutSecsLeft, setLockoutSecsLeft] = useState(0);
   const [showAnswerModal, setShowAnswerModal] = useState(false);
+  const [showIntroModal, setShowIntroModal] = useState(false);
+  const [introDontShowAgain, setIntroDontShowAgain] = useState(true);
 
   // Fanfare & cell flash
   const [fanfareIdx, setFanfareIdx]         = useState<number | null>(null);
@@ -241,6 +243,14 @@ export function WordSearchGame() {
     submitAnswer(answer);
   }
 
+  function handleIntroClose() {
+    const pt = useWordSearchStore.getState().puzzle?.puzzleType;
+    if (introDontShowAgain && pt) {
+      localStorage.setItem(`ws-intro-seen-${pt}`, '1');
+    }
+    setShowIntroModal(false);
+  }
+
   function handleStart() {
     resumeAudio();
     startPuzzle(undefined, localOptions);
@@ -255,6 +265,12 @@ export function WordSearchGame() {
     prevFoundIndicesRef.current      = new Set();
     prevHintedLettersRef.current     = new Map();
     prevAnswerSubmittedRef.current   = false;
+
+    const pt = useWordSearchStore.getState().puzzle?.puzzleType;
+    if (pt && !localStorage.getItem(`ws-intro-seen-${pt}`)) {
+      setIntroDontShowAgain(true);
+      setShowIntroModal(true);
+    }
   }
 
   function handlePlayAgain() {
@@ -448,6 +464,11 @@ export function WordSearchGame() {
           <span className="ws-timer">{formatTime(elapsed)}</span>
         </div>
 
+        {/* Puzzle type tag */}
+        <div className="ws-puzzle-type-tag">
+          {puzzle.puzzleType === 'chain' ? 'Chain Reaction' : 'Crossword'}
+        </div>
+
         {/* Clue */}
         {puzzle.puzzleType === 'chain' ? (
           <div className="ws-chain-clue">
@@ -607,6 +628,36 @@ export function WordSearchGame() {
         )}
 
       </div>
+
+      {/* How-to-play intro modal */}
+      {showIntroModal && (
+        <div className="ws-win">
+          <div className="ws-intro-title">
+            {puzzle.puzzleType === 'chain' ? 'Chain Reaction' : 'Crossword'}
+          </div>
+          {puzzle.puzzleType === 'chain' ? (
+            <ul className="ws-intro-list">
+              <li>The first word is given — find the remaining chain words in the grid</li>
+              <li>Consecutive pairs form a two-word phrase (e.g. "spring chicken", "chicken soup")</li>
+              <li>Figure out the final word that completes the last phrase — that's your answer</li>
+              <li>No penalty for wrong guesses, so take your best shot!</li>
+            </ul>
+          ) : (
+            <ul className="ws-intro-list">
+              <li>Read the clue and find its words hidden in the grid</li>
+              <li>Guess the answer any time — you don't need to find every word first</li>
+              <li>After a correct guess, find the remaining words to finish the round</li>
+              <li>Fewer words revealed before guessing = higher clue bonus</li>
+            </ul>
+          )}
+          <label className="ws-intro-checkbox">
+            <input type="checkbox" checked={introDontShowAgain}
+              onChange={e => setIntroDontShowAgain(e.target.checked)} />
+            Don't show this again
+          </label>
+          <button className="ws-win-btn" onClick={handleIntroClose}>Got it!</button>
+        </div>
+      )}
 
       {/* Correct answer modal — shown after answer is submitted, before all words found */}
       {answerSubmitted && !gameWon && showAnswerModal && (

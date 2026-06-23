@@ -144,7 +144,8 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   startPuzzle(puzzle, options) {
     const opts = options ?? get().options;
     const p = puzzle ?? randomPuzzle(opts.puzzleTypes);
-    const uniqueHiddenWords = getUniqueHiddenWords(p.clueWords);
+    const wordsToHide = p.puzzleType === 'chain' ? p.clueWords.slice(1) : p.clueWords;
+    const uniqueHiddenWords = getUniqueHiddenWords(wordsToHide);
     const { grid, placements } = generateGrid(uniqueHiddenWords, opts.allowBackward, opts.gridSize);
     set({
       puzzle: p,

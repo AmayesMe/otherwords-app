@@ -97,6 +97,20 @@
   color: #ffffff;
 }
 
+/* ── Puzzle type tag ─────────────────────────────────────────────────────── */
+
+.ws-puzzle-type-tag {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+
 /* ── Chain Reaction clue ─────────────────────────────────────────────────── */
 
 .ws-chain-clue {
@@ -705,6 +719,61 @@
   border-bottom: none;
   padding-top: 14px;
   margin-top: 4px;
+}
+
+/* ── How-to-play intro modal ─────────────────────────────────────────────── */
+
+.ws-intro-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  text-align: center;
+}
+
+.ws-intro-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 300px;
+  text-align: left;
+}
+
+.ws-intro-list li {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.4;
+  padding-left: 18px;
+  position: relative;
+}
+
+.ws-intro-list li::before {
+  content: '•';
+  position: absolute;
+  left: 4px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.ws-intro-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ws-intro-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #2a6b3c;
+  flex-shrink: 0;
 }
 
 /* ── Phase 2 "find remaining" banner ────────────────────────────────────── */

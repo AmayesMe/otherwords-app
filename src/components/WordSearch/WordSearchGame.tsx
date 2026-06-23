@@ -59,7 +59,6 @@ export function WordSearchGame() {
     foundWordIndices, foundWordCells, revealedOriginalCells,
     bonusCells, bonusSelections, bonusPoints, hintsUsed, hintedLetters,
     isSelecting, selectionCells, answerError, gameWon, startTime, endTime,
-    lastSelectionResult, selectionCount,
     startPuzzle, startSelecting, updateSelection, endSelection,
     buyHint, submitAnswer, clearError,
   } = useWordSearchStore();
@@ -97,9 +96,6 @@ export function WordSearchGame() {
   // Keep hintCostRef current on every render
   hintCostRef.current = options.hintCost;
 
-  // Sound helper — respects soundEnabled setting
-  const sfx = (fn: () => void) => { if (options.soundEnabled) fn(); };
-
   // ── Timer ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!started || gameWon || !startTime) return;
@@ -114,7 +110,6 @@ export function WordSearchGame() {
     prevBonusLenRef.current = newLen;
 
     const wordLen = bonusSelections[newLen - 1].length;
-    if (options.soundEnabled) sfxBonusLetters(wordLen);
 
     pendingLettersRef.current += wordLen;
 
@@ -149,7 +144,7 @@ export function WordSearchGame() {
     return () => clearTimeout(t);
   }, [meterFull]); // eslint-disable-line
 
-  // ── Word found fanfare ─────────────────────────────────────────────────────
+  // ── Word found fanfare (visual only — sound fires in handlePointerUp) ────────
   useEffect(() => {
     let t1: ReturnType<typeof setTimeout>;
     let t2: ReturnType<typeof setTimeout>;
@@ -159,7 +154,6 @@ export function WordSearchGame() {
         const cells = foundWordCells.get(wi)
           ?? placements.find(p => p.wordIndex === wi)?.cells ?? [];
         setJustFoundCells(new Set(cells.map(c => cellKey(c.row, c.col))));
-        sfx(sfxWordFound);
         t1 = setTimeout(() => setFanfareIdx(null), 800);
         t2 = setTimeout(() => setJustFoundCells(new Set()), 600);
         break;
@@ -176,7 +170,7 @@ export function WordSearchGame() {
       const prev = prevHintedLettersRef.current.get(wi) ?? new Set<number>();
       for (const li of indices) {
         if (!prev.has(li)) {
-          if (!foundWordIndices.has(wi)) sfx(sfxHintGiven);
+          if (!foundWordIndices.has(wi) && useWordSearchStore.getState().options.soundEnabled) sfxHintGiven();
           setHintRevealPos({ wi, li });
           cleanupTimer = setTimeout(() => setHintRevealPos(null), 600);
           break loop;
@@ -187,17 +181,11 @@ export function WordSearchGame() {
     return () => clearTimeout(cleanupTimer);
   }, [hintsUsed]); // eslint-disable-line
 
-  // ── Selection result sounds ────────────────────────────────────────────────
-  useEffect(() => {
-    if (selectionCount > prevSelectionCountRef.current) {
-      prevSelectionCountRef.current = selectionCount;
-      if (lastSelectionResult === 'nothing') sfx(sfxNotFound);
-    }
-  }, [selectionCount, lastSelectionResult]); // eslint-disable-line
+  // ── Selection result sounds fired directly in handlePointerUp ────────────
 
   // ── Answer sounds ──────────────────────────────────────────────────────────
-  useEffect(() => { if (gameWon) sfx(sfxCorrectAnswer); }, [gameWon]); // eslint-disable-line
-  useEffect(() => { if (answerError) sfx(sfxWrongAnswer); }, [answerError]); // eslint-disable-line
+  useEffect(() => { if (gameWon && useWordSearchStore.getState().options.soundEnabled) sfxCorrectAnswer(); }, [gameWon]); // eslint-disable-line
+  useEffect(() => { if (answerError && useWordSearchStore.getState().options.soundEnabled) sfxWrongAnswer(); }, [answerError]); // eslint-disable-line
 
   // ── Error clear ────────────────────────────────────────────────────────────
   if (answerError && !errorTimerRef.current) {
@@ -253,6 +241,16 @@ export function WordSearchGame() {
   function handlePointerUp(_e: React.PointerEvent) {
     if (!isSelecting) return;
     endSelection();
+    // Fire sounds immediately after endSelection (Zustand is sync, state is fresh)
+    const s = useWordSearchStore.getState();
+    if (s.options.soundEnabled) {
+      const result = s.lastSelectionResult;
+      if (result === 'word') sfxWordFound();
+      else if (result === 'bonus') {
+        const wordLen = s.bonusSelections[s.bonusSelections.length - 1]?.length ?? 3;
+        sfxBonusLetters(wordLen);
+      } else if (result === 'nothing') sfxNotFound();
+    }
   }
 
   function handlePointerCancel(_e: React.PointerEvent) {

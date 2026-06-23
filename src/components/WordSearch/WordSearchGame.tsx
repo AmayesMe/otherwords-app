@@ -498,7 +498,6 @@ export function WordSearchGame() {
             ))}
             <span className="ws-progress-label">{foundCount}/{totalCount}</span>
           </div>
-          <span className="ws-bonus-score">+{bonusPoints}</span>
         </div>
 
         {/* Hint meter */}

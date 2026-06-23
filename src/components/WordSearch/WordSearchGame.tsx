@@ -13,6 +13,27 @@ function formatTime(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+// Build an SVG path string for a capsule/pill connecting two cell-center points.
+// r is the radius in grid-unit coordinates (0.43 ≈ slightly narrower than one cell).
+function pillPath(x1: number, y1: number, x2: number, y2: number, r: number): string {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) {
+    // Degenerate: just a circle
+    return `M ${x1 - r},${y1} A ${r},${r},0,1,0,${x1 + r},${y1} A ${r},${r},0,1,0,${x1 - r},${y1} Z`;
+  }
+  const nx = (-dy / len) * r;
+  const ny = (dx / len) * r;
+  return [
+    `M ${x1 + nx},${y1 + ny}`,
+    `A ${r},${r},0,0,0,${x1 - nx},${y1 - ny}`,
+    `L ${x2 - nx},${y2 - ny}`,
+    `A ${r},${r},0,0,0,${x2 + nx},${y2 + ny}`,
+    'Z',
+  ].join(' ');
+}
+
 export function WordSearchGame() {
   const {
     puzzle,
@@ -22,6 +43,8 @@ export function WordSearchGame() {
     gridSize,
     options,
     foundWordIndices,
+    foundWordCells,
+    revealedOriginalCells,
     bonusCells,
     bonusSelections,
     bonusPoints,
@@ -77,10 +100,17 @@ export function WordSearchGame() {
   const hasHintTargets = uniqueHiddenWords.some((_, wi) => !foundWordIndices.has(wi));
 
   const selectedSet = new Set(selectionCells.map(c => cellKey(c.row, c.col)));
+
+  // Build green cell set from actual found locations (not original placements).
+  // For hint-revealed words (no entry in foundWordCells), fall back to placement cells.
   const foundCells = new Set<number>();
-  for (const p of placements) {
-    if (foundWordIndices.has(p.wordIndex)) {
-      for (const c of p.cells) foundCells.add(cellKey(c.row, c.col));
+  for (const wi of foundWordIndices) {
+    const cells = foundWordCells.get(wi);
+    if (cells) {
+      for (const c of cells) foundCells.add(cellKey(c.row, c.col));
+    } else {
+      const p = placements.find(pl => pl.wordIndex === wi);
+      if (p) for (const c of p.cells) foundCells.add(cellKey(c.row, c.col));
     }
   }
 
@@ -229,58 +259,89 @@ export function WordSearchGame() {
   const foundCount = foundWordIndices.size;
   const totalCount = uniqueHiddenWords.length;
 
-  // ── Loop mode SVG lines ───────────────────────────────────────────────────
+  // ── Loop mode SVG overlay ─────────────────────────────────────────────────
 
   function renderLoopOverlay() {
-    const lines: React.ReactNode[] = [];
+    const shapes: React.ReactNode[] = [];
+    const R = 0.43; // pill radius in grid units
 
-    // Found clue word placements
-    for (const p of placements) {
-      if (!foundWordIndices.has(p.wordIndex)) continue;
-      if (p.cells.length < 2) continue;
-      const first = p.cells[0];
-      const last = p.cells[p.cells.length - 1];
-      lines.push(
-        <line
-          key={`w-${p.wordIndex}`}
-          x1={first.col + 0.5} y1={first.row + 0.5}
-          x2={last.col + 0.5}  y2={last.row + 0.5}
-          strokeLinecap="round"
-          strokeWidth={0.85}
-          stroke="rgba(42, 107, 60, 0.55)"
+    // Render found clue words at their actual found location
+    for (const wi of foundWordIndices) {
+      const cells: CellCoord[] | undefined = foundWordCells.get(wi)
+        ?? placements.find(p => p.wordIndex === wi)?.cells;
+      if (!cells || cells.length < 1) continue;
+      const first = cells[0];
+      const last = cells[cells.length - 1];
+      shapes.push(
+        <path
+          key={`w-${wi}`}
+          d={pillPath(first.col + 0.5, first.row + 0.5, last.col + 0.5, last.row + 0.5, R)}
+          fill="rgba(42, 107, 60, 0.10)"
+          stroke="rgba(42, 107, 60, 0.80)"
+          strokeWidth={0.07}
         />
       );
+
+      // If found at a different location, show gray pill at original placement once player finds it
+      const actualCells = foundWordCells.get(wi);
+      if (actualCells) {
+        const placement = placements.find(p => p.wordIndex === wi);
+        if (placement && placement.cells.length >= 2) {
+          const sameAsFwd = actualCells.length === placement.cells.length &&
+            placement.cells.every((c, i) => c.row === actualCells[i].row && c.col === actualCells[i].col);
+          const sameAsRev = actualCells.length === placement.cells.length &&
+            placement.cells.every((c, i) =>
+              c.row === actualCells[actualCells.length - 1 - i].row &&
+              c.col === actualCells[actualCells.length - 1 - i].col);
+          if (!sameAsFwd && !sameAsRev) {
+            const hasRevealedOriginal = placement.cells.some(
+              c => revealedOriginalCells.has(cellKey(c.row, c.col))
+            );
+            if (hasRevealedOriginal) {
+              const pf = placement.cells[0];
+              const pl = placement.cells[placement.cells.length - 1];
+              shapes.push(
+                <path
+                  key={`w-${wi}-orig`}
+                  d={pillPath(pf.col + 0.5, pf.row + 0.5, pl.col + 0.5, pl.row + 0.5, R)}
+                  fill="rgba(255, 255, 255, 0.05)"
+                  stroke="rgba(255, 255, 255, 0.25)"
+                  strokeWidth={0.05}
+                />
+              );
+            }
+          }
+        }
+      }
     }
 
     // Bonus word selections
     bonusSelections.forEach((sel: CellCoord[], idx: number) => {
-      if (sel.length < 2) return;
+      if (sel.length < 1) return;
       const first = sel[0];
       const last = sel[sel.length - 1];
-      lines.push(
-        <line
+      shapes.push(
+        <path
           key={`b-${idx}`}
-          x1={first.col + 0.5} y1={first.row + 0.5}
-          x2={last.col + 0.5}  y2={last.row + 0.5}
-          strokeLinecap="round"
-          strokeWidth={0.85}
-          stroke="rgba(200, 200, 200, 0.28)"
+          d={pillPath(first.col + 0.5, first.row + 0.5, last.col + 0.5, last.row + 0.5, R)}
+          fill="rgba(200, 200, 200, 0.10)"
+          stroke="rgba(200, 200, 200, 0.38)"
+          strokeWidth={0.06}
         />
       );
     });
 
-    // Active selection preview
-    if (isSelecting && selectionCells.length >= 2) {
+    // Active drag preview
+    if (isSelecting && selectionCells.length >= 1) {
       const first = selectionCells[0];
       const last = selectionCells[selectionCells.length - 1];
-      lines.push(
-        <line
+      shapes.push(
+        <path
           key="sel"
-          x1={first.col + 0.5} y1={first.row + 0.5}
-          x2={last.col + 0.5}  y2={last.row + 0.5}
-          strokeLinecap="round"
-          strokeWidth={0.85}
-          stroke="rgba(232, 184, 48, 0.7)"
+          d={pillPath(first.col + 0.5, first.row + 0.5, last.col + 0.5, last.row + 0.5, R)}
+          fill="rgba(232, 184, 48, 0.10)"
+          stroke="rgba(232, 184, 48, 0.75)"
+          strokeWidth={0.07}
         />
       );
     }
@@ -291,7 +352,7 @@ export function WordSearchGame() {
         viewBox={`0 0 ${gridSize} ${gridSize}`}
         preserveAspectRatio="none"
       >
-        {lines}
+        {shapes}
       </svg>
     );
   }
@@ -349,17 +410,17 @@ export function WordSearchGame() {
             {grid.map((row, r) =>
               row.map((letter, c) => {
                 const key = cellKey(r, c);
-                const isSel   = selectedSet.has(key);
-                const isFound = foundCells.has(key);
-                const isBonus = !isFound && bonusCells.has(key);
+                const isSel      = selectedSet.has(key);
+                const isFound    = foundCells.has(key);
+                const isOriginal = !isFound && revealedOriginalCells.has(key);
+                const isBonus    = !isFound && !isOriginal && bonusCells.has(key);
                 let cls = 'ws-cell';
                 if (!isLoopMode) {
-                  if (isFound) cls += ' ws-cell-found';
-                  else if (isBonus) cls += ' ws-cell-bonus';
-                  if (isSel) cls += ' ws-cell-selected';
-                } else {
-                  if (isSel) cls += ' ws-cell-selected';
+                  if (isFound)    cls += ' ws-cell-found';
+                  else if (isOriginal) cls += ' ws-cell-original';
+                  else if (isBonus)    cls += ' ws-cell-bonus';
                 }
+                if (isSel) cls += ' ws-cell-selected';
                 return <div key={key} className={cls}>{letter}</div>;
               }),
             )}

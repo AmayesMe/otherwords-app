@@ -63,88 +63,56 @@ export const CROSSWORD_PUZZLES: Puzzle[] = [
   },
 ];
 
-// Each puzzle is a compound-word chain: consecutive pairs form one compound word.
-// clueWords = the chain links hidden in the grid; answer = the final link.
+// Each puzzle is a two-word-phrase chain: consecutive pairs form a two-word phrase (words stay separate).
+// clueWords = 7 words hidden in the grid; answer = the 8th word (final link, not hidden).
 export const CHAIN_PUZZLES: Puzzle[] = [
   {
-    id: 'chain-punch',
+    id: 'chain-chain',
     puzzleType: 'chain',
-    clue: 'SUN → FLOWER → POT → HOLE → ?',
-    clueWords: ['SUN', 'FLOWER', 'POT', 'HOLE'],
-    answer: 'Punch',
-    // SUNFLOWER · FLOWERPOT · POTHOLE · HOLE PUNCH
+    clue: 'ROLLING → STONE → COLD → SHOULDER → PAD → THAI → FOOD → ?',
+    clueWords: ['ROLLING', 'STONE', 'COLD', 'SHOULDER', 'PAD', 'THAI', 'FOOD'],
+    answer: 'Chain',
+    // rolling stone · stone cold · cold shoulder · shoulder pad · pad Thai · Thai food · food chain
   },
   {
-    id: 'chain-fast',
+    id: 'chain-elbow',
     puzzleType: 'chain',
-    clue: 'RAIN → BOW → TIE → BREAK → ?',
-    clueWords: ['RAIN', 'BOW', 'TIE', 'BREAK'],
-    answer: 'Fast',
-    // RAINBOW · BOWTIE · TIEBREAK · BREAKFAST
+    clue: 'HOT → SPRING → CHICKEN → SOUP → KITCHEN → TABLE → TENNIS → ?',
+    clueWords: ['HOT', 'SPRING', 'CHICKEN', 'SOUP', 'KITCHEN', 'TABLE', 'TENNIS'],
+    answer: 'Elbow',
+    // hot spring · spring chicken · chicken soup · soup kitchen · kitchen table · table tennis · tennis elbow
   },
   {
-    id: 'chain-off',
+    id: 'chain-wave',
     puzzleType: 'chain',
-    clue: 'FIRE → WORK → SHOP → LIFT → ?',
-    clueWords: ['FIRE', 'WORK', 'SHOP', 'LIFT'],
-    answer: 'Off',
-    // FIREWORK · WORKSHOP · SHOPLIFT · LIFTOFF
+    clue: 'LONG → JUMP → ROPE → TRICK → SHOT → CLOCK → RADIO → ?',
+    clueWords: ['LONG', 'JUMP', 'ROPE', 'TRICK', 'SHOT', 'CLOCK', 'RADIO'],
+    answer: 'Wave',
+    // long jump · jump rope · rope trick · trick shot · shot clock · clock radio · radio wave
   },
   {
-    id: 'chain-out',
+    id: 'chain-bomb',
     puzzleType: 'chain',
-    clue: 'BOOK → MARK → DOWN → FALL → ?',
-    clueWords: ['BOOK', 'MARK', 'DOWN', 'FALL'],
-    answer: 'Out',
-    // BOOKMARK · MARKDOWN · DOWNFALL · FALLOUT
+    clue: 'COLD → CASE → STUDY → HALL → PASS → MARK → TIME → ?',
+    clueWords: ['COLD', 'CASE', 'STUDY', 'HALL', 'PASS', 'MARK', 'TIME'],
+    answer: 'Bomb',
+    // cold case · case study · study hall · hall pass · pass mark · mark time · time bomb
   },
   {
-    id: 'chain-walk',
+    id: 'chain-piano',
     puzzleType: 'chain',
-    clue: 'EAR → RING → LEADER → BOARD → ?',
-    clueWords: ['EAR', 'RING', 'LEADER', 'BOARD'],
-    answer: 'Walk',
-    // EARRING · RINGLEADER · LEADERBOARD · BOARDWALK
+    clue: 'OPEN → SEASON → TICKET → PRICE → TAG → TEAM → PLAYER → ?',
+    clueWords: ['OPEN', 'SEASON', 'TICKET', 'PRICE', 'TAG', 'TEAM', 'PLAYER'],
+    answer: 'Piano',
+    // open season · season ticket · ticket price · price tag · tag team · team player · player piano
   },
   {
-    id: 'chain-step',
+    id: 'chain-flight',
     puzzleType: 'chain',
-    clue: 'WATER → FALL → OUT → DOOR → ?',
-    clueWords: ['WATER', 'FALL', 'OUT', 'DOOR'],
-    answer: 'Step',
-    // WATERFALL · FALLOUT · OUTDOOR · DOORSTEP
-  },
-  {
-    id: 'chain-life',
-    puzzleType: 'chain',
-    clue: 'HEAD → BAND → STAND → STILL → ?',
-    clueWords: ['HEAD', 'BAND', 'STAND', 'STILL'],
-    answer: 'Life',
-    // HEADBAND · BANDSTAND · STANDSTILL · STILL LIFE
-  },
-  {
-    id: 'chain-mate',
-    puzzleType: 'chain',
-    clue: 'THUNDER → CLAP → BOARD → ROOM → ?',
-    clueWords: ['THUNDER', 'CLAP', 'BOARD', 'ROOM'],
-    answer: 'Mate',
-    // THUNDERCLAP · CLAPBOARD · BOARDROOM · ROOMMATE
-  },
-  {
-    id: 'chain-soil',
-    puzzleType: 'chain',
-    clue: 'OVER → TIME → TABLE → TOP → ?',
-    clueWords: ['OVER', 'TIME', 'TABLE', 'TOP'],
-    answer: 'Soil',
-    // OVERTIME · TIMETABLE · TABLETOP · TOPSOIL
-  },
-  {
-    id: 'chain-game',
-    puzzleType: 'chain',
-    clue: 'UNDER → COVER → STORY → BOARD → ?',
-    clueWords: ['UNDER', 'COVER', 'STORY', 'BOARD'],
-    answer: 'Game',
-    // UNDERCOVER · COVER STORY · STORYBOARD · BOARD GAME
+    clue: 'TRADE → WIND → FARM → FRESH → AIR → GUITAR → SOLO → ?',
+    clueWords: ['TRADE', 'WIND', 'FARM', 'FRESH', 'AIR', 'GUITAR', 'SOLO'],
+    answer: 'Flight',
+    // trade wind · wind farm · farm fresh · fresh air · air guitar · guitar solo · solo flight
   },
 ];
 

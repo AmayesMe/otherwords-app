@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { generateGrid, getUniqueHiddenWords, computeSelection, cellKey } from '../wordSearch/gridGenerator';
-import { PUZZLES } from '../wordSearch/puzzles';
+import { ALL_PUZZLES } from '../wordSearch/puzzles';
 import { loadDictionary, isValidWord } from '../game/dictionary';
-import type { CellCoord, Puzzle, WordPlacement } from '../wordSearch/types';
+import type { CellCoord, Puzzle, PuzzleType, WordPlacement } from '../wordSearch/types';
 
 loadDictionary();
 
@@ -13,6 +13,7 @@ export interface WordSearchOptions {
   selectionMode: 'block' | 'loop';
   requireAllFound: boolean;
   soundEnabled: boolean;
+  puzzleTypes: PuzzleType[];
 }
 
 export const DEFAULT_OPTIONS: WordSearchOptions = {
@@ -22,6 +23,7 @@ export const DEFAULT_OPTIONS: WordSearchOptions = {
   selectionMode: 'loop',
   requireAllFound: false,
   soundEnabled: true,
+  puzzleTypes: ['crossword', 'chain'],
 };
 
 function pathKey(cells: CellCoord[]) {
@@ -92,8 +94,10 @@ function findMatchingPlacement(
   return null;
 }
 
-function randomPuzzle(): Puzzle {
-  return PUZZLES[Math.floor(Math.random() * PUZZLES.length)];
+function randomPuzzle(types: PuzzleType[]): Puzzle {
+  const pool = ALL_PUZZLES.filter(p => types.includes(p.puzzleType));
+  const source = pool.length > 0 ? pool : ALL_PUZZLES;
+  return source[Math.floor(Math.random() * source.length)];
 }
 
 export const useWordSearchStore = create<WordSearchState>((set, get) => ({
@@ -123,8 +127,8 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   gameWon: false,
 
   startPuzzle(puzzle, options) {
-    const p = puzzle ?? randomPuzzle();
     const opts = options ?? get().options;
+    const p = puzzle ?? randomPuzzle(opts.puzzleTypes);
     const uniqueHiddenWords = getUniqueHiddenWords(p.clueWords);
     const { grid, placements } = generateGrid(uniqueHiddenWords, opts.allowBackward, opts.gridSize);
     set({

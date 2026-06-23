@@ -4,7 +4,7 @@ import { useWordSearchStore, DEFAULT_OPTIONS } from '../../store/wordSearchStore
 import { useGameStore } from '../../store/gameStore';
 import { cellKey, MIN_GRID_SIZE, MAX_GRID_SIZE } from '../../wordSearch/gridGenerator';
 import type { WordSearchOptions } from '../../store/wordSearchStore';
-import type { CellCoord } from '../../wordSearch/types';
+import type { CellCoord, PuzzleType } from '../../wordSearch/types';
 import {
   resumeAudio, sfxHintGiven, sfxWordFound, sfxBonusLetters,
   sfxCorrectAnswer, sfxWrongAnswer, sfxNotFound,
@@ -317,6 +317,30 @@ export function WordSearchGame() {
 
           <div className="ws-option-row">
             <label className="ws-option-label">
+              Puzzle types
+              <span className="ws-option-desc">Which formats to include when selecting a puzzle</span>
+            </label>
+            <div className="ws-mode-toggle">
+              {(['crossword', 'chain'] as PuzzleType[]).map(type => {
+                const active = localOptions.puzzleTypes.includes(type);
+                return (
+                  <button key={type}
+                    className={`ws-mode-btn ${active ? 'ws-mode-btn-active' : ''}`}
+                    onClick={() => setLocalOptions(o => {
+                      const next = active
+                        ? o.puzzleTypes.filter(t => t !== type)
+                        : [...o.puzzleTypes, type];
+                      return { ...o, puzzleTypes: next.length > 0 ? next : [type] };
+                    })}>
+                    {type === 'crossword' ? 'Crossword' : 'Chain'}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="ws-option-row">
+            <label className="ws-option-label">
               Sound effects
               <span className="ws-option-desc">Audio feedback for game events</span>
             </label>
@@ -417,40 +441,80 @@ export function WordSearchGame() {
         </div>
 
         {/* Clue */}
-        <div className="ws-clue">
-          {puzzle.clueWords.map((word, i) => {
-            const upper = word.toUpperCase().replace(/[^A-Z]/g, '');
-            if (upper.length < 3) {
-              return <span key={i} className="ws-clue-word ws-clue-word-revealed">{upper || word.toUpperCase()}</span>;
-            }
-            const idx = clueWordToHiddenIdx[i];
-            if (idx === -1 || foundWordIndices.has(idx)) {
+        {puzzle.puzzleType === 'chain' ? (
+          <div className="ws-chain-clue">
+            {puzzle.clueWords.map((word, i) => {
+              const upper = word.toUpperCase().replace(/[^A-Z]/g, '');
+              const idx   = clueWordToHiddenIdx[i];
+              const found = idx === -1 || foundWordIndices.has(idx);
               const isFanfare = fanfareIdx === idx && idx !== -1;
+              const hinted = hintedLetters.get(idx) ?? new Set<number>();
               return (
-                <span key={i}
-                  className={`ws-clue-word ws-clue-word-revealed${isFanfare ? ' ws-clue-word-fanfare' : ''}`}>
-                  {upper}
+                <span key={i} className="ws-chain-item">
+                  {i > 0 && <span className="ws-chain-arrow">→</span>}
+                  {found ? (
+                    <span className={`ws-chain-word ws-chain-word-found${isFanfare ? ' ws-clue-word-fanfare' : ''}`}>
+                      {upper}
+                    </span>
+                  ) : (
+                    <span className="ws-chain-word ws-chain-word-hidden">
+                      {upper.split('').map((ch, li) => {
+                        if (hinted.has(li)) {
+                          const isNew = hintRevealPos?.wi === idx && hintRevealPos?.li === li;
+                          return (
+                            <span key={li} className={`ws-clue-hint-letter${isNew ? ' ws-clue-hint-letter-new' : ''}`}>
+                              {ch}
+                            </span>
+                          );
+                        }
+                        return <span key={li}>_</span>;
+                      })}
+                    </span>
+                  )}
                 </span>
               );
-            }
-            const hinted = hintedLetters.get(idx) ?? new Set<number>();
-            return (
-              <span key={i} className="ws-clue-word ws-clue-word-hidden">
-                {upper.split('').map((ch, li) => {
-                  if (hinted.has(li)) {
-                    const isNew = hintRevealPos?.wi === idx && hintRevealPos?.li === li;
-                    return (
-                      <span key={li} className={`ws-clue-hint-letter${isNew ? ' ws-clue-hint-letter-new' : ''}`}>
-                        {ch}
-                      </span>
-                    );
-                  }
-                  return <span key={li}>_</span>;
-                })}
-              </span>
-            );
-          })}
-        </div>
+            })}
+            <span className="ws-chain-item">
+              <span className="ws-chain-arrow">→</span>
+              <span className="ws-chain-answer-mark">?</span>
+            </span>
+          </div>
+        ) : (
+          <div className="ws-clue">
+            {puzzle.clueWords.map((word, i) => {
+              const upper = word.toUpperCase().replace(/[^A-Z]/g, '');
+              if (upper.length < 3) {
+                return <span key={i} className="ws-clue-word ws-clue-word-revealed">{upper || word.toUpperCase()}</span>;
+              }
+              const idx = clueWordToHiddenIdx[i];
+              if (idx === -1 || foundWordIndices.has(idx)) {
+                const isFanfare = fanfareIdx === idx && idx !== -1;
+                return (
+                  <span key={i}
+                    className={`ws-clue-word ws-clue-word-revealed${isFanfare ? ' ws-clue-word-fanfare' : ''}`}>
+                    {upper}
+                  </span>
+                );
+              }
+              const hinted = hintedLetters.get(idx) ?? new Set<number>();
+              return (
+                <span key={i} className="ws-clue-word ws-clue-word-hidden">
+                  {upper.split('').map((ch, li) => {
+                    if (hinted.has(li)) {
+                      const isNew = hintRevealPos?.wi === idx && hintRevealPos?.li === li;
+                      return (
+                        <span key={li} className={`ws-clue-hint-letter${isNew ? ' ws-clue-hint-letter-new' : ''}`}>
+                          {ch}
+                        </span>
+                      );
+                    }
+                    return <span key={li}>_</span>;
+                  })}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         {/* Answer */}
         <div className="ws-answer-area">

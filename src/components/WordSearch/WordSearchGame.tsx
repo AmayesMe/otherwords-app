@@ -159,13 +159,13 @@ export function WordSearchGame() {
             const upper = word.toUpperCase().replace(/[^A-Z]/g, '');
             if (upper.length < 3) {
               return (
-                <span key={i} className="ws-clue-word ws-clue-word-revealed">{word}</span>
+                <span key={i} className="ws-clue-word ws-clue-word-revealed">{upper || word.toUpperCase()}</span>
               );
             }
             const idx = uniqueHiddenWords.indexOf(upper);
             if (idx === -1 || foundWordIndices.has(idx)) {
               return (
-                <span key={i} className="ws-clue-word ws-clue-word-revealed">{word}</span>
+                <span key={i} className="ws-clue-word ws-clue-word-revealed">{upper}</span>
               );
             }
             // Partially or fully hidden — render letter by letter

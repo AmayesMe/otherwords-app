@@ -55,7 +55,7 @@
   padding: var(--space-2);
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 8px;
+  gap: 6px 14px;
   align-items: baseline;
   min-height: 52px;
 }

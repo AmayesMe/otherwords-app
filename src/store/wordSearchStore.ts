@@ -148,7 +148,7 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   endSelection() {
     const {
       selectionCells, placements, foundWordIndices,
-      grid, bonusCells, foundBonusPaths, bonusPoints,
+      grid, uniqueHiddenWords, bonusCells, foundBonusPaths, bonusPoints,
     } = get();
 
     if (selectionCells.length < 2) {
@@ -162,24 +162,35 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
     const newFoundBonusPaths = new Set(foundBonusPaths);
     let earned = 0;
 
-    const clueMatch = findMatchingPlacement(selectionCells, placements, foundWordIndices);
+    const extracted = selectionCells.map(c => grid[c.row][c.col]).join('');
+    const extractedRev = extracted.split('').reverse().join('');
 
-    if (clueMatch !== null) {
-      newFoundWordIndices.add(clueMatch);
-      // Award bonus for the clue word if this path hasn't been counted
+    // 1. Exact placement match (checks cell positions)
+    let clueMatchIndex = findMatchingPlacement(selectionCells, placements, newFoundWordIndices);
+
+    // 2. String match anywhere — same word found at a different grid position
+    if (clueMatchIndex === null) {
+      for (let wi = 0; wi < uniqueHiddenWords.length; wi++) {
+        if (newFoundWordIndices.has(wi)) continue;
+        if (extracted === uniqueHiddenWords[wi] || extractedRev === uniqueHiddenWords[wi]) {
+          clueMatchIndex = wi;
+          break;
+        }
+      }
+    }
+
+    if (clueMatchIndex !== null) {
+      newFoundWordIndices.add(clueMatchIndex);
       if (!newFoundBonusPaths.has(key)) {
         earned += selectionCells.length;
         newFoundBonusPaths.add(key);
       }
-    } else {
+    } else if (!newFoundBonusPaths.has(key)) {
       // Check dictionary for non-clue bonus words
-      if (!newFoundBonusPaths.has(key)) {
-        const word = selectionCells.map(c => grid[c.row][c.col]).join('').toLowerCase();
-        if (isValidWord(word)) {
-          for (const c of selectionCells) newBonusCells.add(cellKey(c.row, c.col));
-          earned += selectionCells.length;
-          newFoundBonusPaths.add(key);
-        }
+      if (isValidWord(extracted.toLowerCase())) {
+        for (const c of selectionCells) newBonusCells.add(cellKey(c.row, c.col));
+        earned += selectionCells.length;
+        newFoundBonusPaths.add(key);
       }
     }
 
@@ -214,9 +225,16 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
     const pick = candidates[Math.floor(Math.random() * candidates.length)];
     const newHintedLetters = new Map(hintedLetters);
     const existing = newHintedLetters.get(pick.wordIndex) ?? new Set<number>();
-    newHintedLetters.set(pick.wordIndex, new Set([...existing, pick.letterIndex]));
+    const allHinted = new Set([...existing, pick.letterIndex]);
+    newHintedLetters.set(pick.wordIndex, allHinted);
 
-    set({ hintsUsed: hintsUsed + 1, hintedLetters: newHintedLetters });
+    // If hints now cover every letter of this word, auto-reveal it (turns green on board)
+    const newFoundWordIndices = new Set(foundWordIndices);
+    if (allHinted.size === uniqueHiddenWords[pick.wordIndex].length) {
+      newFoundWordIndices.add(pick.wordIndex);
+    }
+
+    set({ hintsUsed: hintsUsed + 1, hintedLetters: newHintedLetters, foundWordIndices: newFoundWordIndices });
   },
 
   submitAnswer(answer) {

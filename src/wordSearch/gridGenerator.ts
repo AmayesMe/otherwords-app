@@ -137,6 +137,7 @@ export function computeSelection(
   endRow: number,
   endCol: number,
   gridSize: number,
+  allowBackward = true,
 ): CellCoord[] {
   const dr = endRow - startRow;
   const dc = endCol - startCol;
@@ -147,6 +148,12 @@ export function computeSelection(
   const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
   const stepRow = Math.round(Math.sin(snapped));
   const stepC   = Math.round(Math.cos(snapped));
+
+  // When backward is disabled, reject directions that go up or purely left
+  if (!allowBackward) {
+    const isForward = stepRow > 0 || (stepRow === 0 && stepC > 0);
+    if (!isForward) return [{ row: startRow, col: startCol }];
+  }
 
   const len = stepRow === 0 ? Math.abs(dc)
             : stepC === 0   ? Math.abs(dr)

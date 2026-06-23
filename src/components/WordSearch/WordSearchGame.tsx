@@ -70,31 +70,16 @@ export function WordSearchGame() {
   const [started, setStarted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
-  // Hint meter
-  const [meterFull, setMeterFull]   = useState(false);
-  const [meterValue, setMeterValue] = useState(0);
-
   // Fanfare & cell flash
   const [fanfareIdx, setFanfareIdx]         = useState<number | null>(null);
   const [justFoundCells, setJustFoundCells] = useState(new Set<number>());
   const [hintRevealPos, setHintRevealPos]   = useState<{ wi: number; li: number } | null>(null);
 
   // Refs for change-detection
-  const gridRef               = useRef<HTMLDivElement>(null);
-  const errorTimerRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevFoundIndicesRef   = useRef(new Set<number>());
-  const prevHintedLettersRef  = useRef(new Map<number, Set<number>>());
-  const prevSelectionCountRef = useRef(0);
-
-  // Meter animation refs
-  const meterValueRef     = useRef(0);
-  const pendingLettersRef = useRef(0);
-  const hintCostRef       = useRef(options.hintCost);
-  const meterStepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const prevBonusLenRef   = useRef(0);
-
-  // Keep hintCostRef current on every render
-  hintCostRef.current = options.hintCost;
+  const gridRef              = useRef<HTMLDivElement>(null);
+  const errorTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevFoundIndicesRef  = useRef(new Set<number>());
+  const prevHintedLettersRef = useRef(new Map<number, Set<number>>());
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -103,46 +88,16 @@ export function WordSearchGame() {
     return () => clearInterval(id);
   }, [started, gameWon, startTime]);
 
-  // ── Bonus word: ascending sounds + letter-by-letter meter fill ─────────────
+  // ── Auto-hint: fires when accumulated points cover another hint cost ─────────
   useEffect(() => {
-    const newLen = bonusSelections.length;
-    if (newLen <= prevBonusLenRef.current) return;
-    prevBonusLenRef.current = newLen;
-
-    const wordLen = bonusSelections[newLen - 1].length;
-
-    pendingLettersRef.current += wordLen;
-
-    if (meterStepTimerRef.current) return; // already running
-    meterStepTimerRef.current = setInterval(() => {
-      if (pendingLettersRef.current <= 0) {
-        clearInterval(meterStepTimerRef.current!);
-        meterStepTimerRef.current = null;
-        return;
-      }
-      pendingLettersRef.current--;
-      meterValueRef.current = Math.min(100, meterValueRef.current + 100 / hintCostRef.current);
-      setMeterValue(meterValueRef.current);
-      if (meterValueRef.current >= 100) {
-        clearInterval(meterStepTimerRef.current!);
-        meterStepTimerRef.current = null;
-        pendingLettersRef.current = 0;
-        setMeterFull(true);
-      }
-    }, 100);
-  }, [bonusSelections.length]); // eslint-disable-line
-
-  // ── When meter full, buy hint after pulse animation ────────────────────────
-  useEffect(() => {
-    if (!meterFull) return;
-    const t = setTimeout(() => {
-      buyHint();
-      meterValueRef.current = 0;
-      setMeterFull(false);
-      setMeterValue(0);
-    }, 700);
-    return () => clearTimeout(t);
-  }, [meterFull]); // eslint-disable-line
+    if (!started || gameWon) return;
+    const hasTargets = uniqueHiddenWords.some((_, wi) => !foundWordIndices.has(wi));
+    const available  = bonusPoints - hintsUsed * options.hintCost;
+    if (available >= options.hintCost && hasTargets) {
+      const t = setTimeout(() => buyHint(), 700);
+      return () => clearTimeout(t);
+    }
+  }, [bonusPoints, hintsUsed, started, gameWon]); // eslint-disable-line
 
   // ── Word found fanfare (visual only — sound fires in handlePointerUp) ────────
   useEffect(() => {
@@ -196,6 +151,9 @@ export function WordSearchGame() {
   }
 
   // ── Derived display values ─────────────────────────────────────────────────
+  const available   = bonusPoints - hintsUsed * options.hintCost;
+  const meterPercent = Math.min(100, Math.max(0, (available / options.hintCost) * 100));
+
   const selectedSet = new Set(selectionCells.map(c => cellKey(c.row, c.col)));
   const foundCells  = new Set<number>();
   for (const wi of foundWordIndices) {
@@ -270,35 +228,16 @@ export function WordSearchGame() {
     setStarted(true);
     setAnswer('');
     setElapsed(0);
-    setMeterFull(false);
-    setMeterValue(0);
     setFanfareIdx(null);
     setJustFoundCells(new Set());
     setHintRevealPos(null);
-    // Reset meter animation state
-    meterValueRef.current = 0;
-    pendingLettersRef.current = 0;
-    if (meterStepTimerRef.current) {
-      clearInterval(meterStepTimerRef.current);
-      meterStepTimerRef.current = null;
-    }
-    prevFoundIndicesRef.current   = new Set();
-    prevHintedLettersRef.current  = new Map();
-    prevSelectionCountRef.current = 0;
-    prevBonusLenRef.current       = 0;
+    prevFoundIndicesRef.current  = new Set();
+    prevHintedLettersRef.current = new Map();
   }
 
   function handlePlayAgain() {
     resumeAudio();
     setStarted(false);
-    setMeterFull(false);
-    setMeterValue(0);
-    meterValueRef.current = 0;
-    pendingLettersRef.current = 0;
-    if (meterStepTimerRef.current) {
-      clearInterval(meterStepTimerRef.current);
-      meterStepTimerRef.current = null;
-    }
   }
 
   const finalTime  = endTime && startTime ? endTime - startTime : null;
@@ -564,10 +503,10 @@ export function WordSearchGame() {
 
         {/* Hint meter */}
         {!allFound && (
-          <div className={`ws-hint-row${meterFull ? ' ws-hint-full' : ''}`}>
+          <div className={`ws-hint-row${available >= options.hintCost ? ' ws-hint-full' : ''}`}>
             <span className="ws-hint-row-label">Hint</span>
             <div className="ws-hint-meter">
-              <div className="ws-hint-meter-fill" style={{ width: `${meterValue}%` }} />
+              <div className="ws-hint-meter-fill" style={{ width: `${meterPercent}%` }} />
             </div>
           </div>
         )}

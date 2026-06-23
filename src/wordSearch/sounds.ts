@@ -22,7 +22,14 @@ function note(freq: number, offsetSec: number, durSec: number, vol = 0.3, type: 
   const c = getCtx();
   if (!c) return;
   try {
-    const t = c.currentTime + offsetSec;
+    // Safari: context may still be suspended when note() is called; resume() here
+    // and add a 0.1s base offset so notes land after the context starts running.
+    let base = 0;
+    if (c.state !== 'running') {
+      c.resume().catch(() => {});
+      base = 0.1;
+    }
+    const t = c.currentTime + base + offsetSec;
     const osc = c.createOscillator();
     const gain = c.createGain();
     osc.connect(gain);

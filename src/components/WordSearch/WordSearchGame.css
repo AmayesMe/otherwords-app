@@ -1,0 +1,296 @@
+/* ── Word Search Game ─────────────────────────────────────────────────────── */
+
+.ws-game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  padding: calc(var(--space-2) + env(safe-area-inset-top, 0px)) var(--space-2)
+    calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+  gap: var(--space-2);
+  overflow: hidden;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.ws-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: var(--space-2);
+}
+
+.ws-back-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.ws-back-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ws-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex: 1;
+}
+
+/* ── Clue display ────────────────────────────────────────────────────────── */
+
+.ws-clue {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: baseline;
+  min-height: 52px;
+}
+
+.ws-clue-word {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition: color 0.3s, opacity 0.3s;
+}
+
+.ws-clue-word-hidden {
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.12em;
+}
+
+.ws-clue-word-revealed {
+  color: #ffffff;
+}
+
+/* ── Grid ────────────────────────────────────────────────────────────────── */
+
+.ws-grid-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  width: 100%;
+}
+
+.ws-grid {
+  --cell: min(
+    calc((100vw - 32px) / 15),
+    calc((100dvh - 280px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 15)
+  );
+  display: grid;
+  grid-template-columns: repeat(15, var(--cell));
+  grid-template-rows: repeat(15, var(--cell));
+  user-select: none;
+  touch-action: none;
+  cursor: default;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ws-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--cell) * 0.52);
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.12s, color 0.12s;
+  line-height: 1;
+}
+
+.ws-cell-selected {
+  background: #e8b830;
+  color: #111;
+  border-color: #c99a10;
+  z-index: 1;
+}
+
+.ws-cell-found {
+  background: #2a6b3c;
+  color: #a8f0be;
+  border-color: #1e5130;
+}
+
+.ws-cell-found.ws-cell-selected {
+  background: #e8b830;
+  color: #111;
+}
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+
+.ws-progress {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.ws-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transition: background 0.3s;
+  flex-shrink: 0;
+}
+
+.ws-progress-dot-found {
+  background: #2a6b3c;
+}
+
+.ws-progress-label {
+  margin-left: auto;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Answer area ──────────────────────────────────────────────────────────── */
+
+.ws-answer-area {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ws-answer-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.ws-answer-row {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.ws-answer-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #fff;
+  font-size: 16px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ws-answer-input:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ws-answer-input.ws-answer-error {
+  border-color: #e05252;
+  background: rgba(224, 82, 82, 0.1);
+  animation: ws-shake 0.35s ease;
+}
+
+@keyframes ws-shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+
+.ws-submit-btn {
+  background: #ffffff;
+  color: #111111;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.ws-submit-btn:hover {
+  opacity: 0.85;
+}
+
+.ws-submit-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ── Win overlay ─────────────────────────────────────────────────────────── */
+
+.ws-win {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  z-index: 100;
+  padding: var(--space-4);
+}
+
+.ws-win-title {
+  font-size: 36px;
+  font-weight: 800;
+  color: #ffffff;
+  text-align: center;
+}
+
+.ws-win-answer {
+  font-size: 28px;
+  font-weight: 700;
+  color: #a8f0be;
+  text-align: center;
+}
+
+.ws-win-btn {
+  background: #ffffff;
+  color: #111111;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 32px;
+  font-size: 17px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.ws-win-btn:hover {
+  opacity: 0.85;
+}
+
+/* ── Container ───────────────────────────────────────────────────────────── */
+
+.ws-container {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}

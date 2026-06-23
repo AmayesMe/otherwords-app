@@ -8,6 +8,7 @@ import { Tile } from './components/Tile/Tile';
 import { TurnReplayOverlay } from './components/TurnReplay/TurnReplayOverlay';
 import { GameOverScreen } from './components/GameOver/GameOverScreen';
 import { AuthScreen } from './components/Auth/AuthScreen';
+import { WordSearchGame } from './components/WordSearch/WordSearchGame';
 import { useGameStore } from './store/gameStore';
 import { useAuth } from './hooks/useAuth';
 import { getDisplayName, hasDisplayName } from './lib/auth';
@@ -186,6 +187,7 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────────────────
 
   if (screen === 'lobby') return <Lobby />;
+  if (screen === 'word-search') return <WordSearchGame />;
 
   // Use real names; fall back to local myName for own slot, then neutral "Player N".
   // Never show "You" or "Opponent" — use the actual names people set.

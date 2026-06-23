@@ -130,6 +130,7 @@ function ScoreBlock({ score, owner, name, align }: ScoreBlockProps) {
 export function Lobby() {
   const {
     startLocalGame,
+    startWordSearch,
     createOnlineGame,
     joinOnlineGame,
     resumeGame,
@@ -385,6 +386,7 @@ export function Lobby() {
               <button className="lobby-btn lobby-btn-primary" onClick={handleCreate}>New Game</button>
               <button className="lobby-btn lobby-btn-secondary" onClick={() => { setError(null); setMode('joining'); }}>Join Game</button>
               <button className="lobby-btn lobby-btn-ghost" onClick={startLocalGame}>Play Local</button>
+              <button className="lobby-btn lobby-btn-ghost" onClick={startWordSearch}>Word Search</button>
             </div>
           </div>
         )}

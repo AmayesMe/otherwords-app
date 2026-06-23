@@ -95,7 +95,7 @@ interface GameStore {
   wildRedigs: Record<string, string>;
 
   // ── Multiplayer state ──────────────────────────────────────────────────────
-  screen: 'lobby' | 'playing';
+  screen: 'lobby' | 'playing' | 'word-search';
   gameId: string | null;        // null = local (pass-and-play)
   myRole: Player | null;        // null = local (you are both players)
   myName: string;               // this device's player name (persisted)
@@ -127,6 +127,8 @@ interface GameStore {
   assignWildLetter: (letter: string) => void;
   cancelWildAssignment: () => void;
   beginWildRedesig: (col: number, row: number) => void;
+
+  startWordSearch: () => void;
 
   // ── Multiplayer actions ────────────────────────────────────────────────────
   startLocalGame: () => void;
@@ -847,6 +849,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         set({ syncError: 'Resign failed to sync — opponent may not be notified.' });
       });
     }
+  },
+
+  // ── Word Search ───────────────────────────────────────────────────────────
+
+  startWordSearch() {
+    set({ screen: 'word-search' });
   },
 
   // ── Multiplayer actions ───────────────────────────────────────────────────

@@ -353,7 +353,8 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
         set({ answerSubmitted: true, clueBonus, wordsRevealedAtAnswer: K });
       }
     } else {
-      set({ answerError: true, guessLockoutEnd: Date.now() + 10000 });
+      const lockout = puzzle.puzzleType === 'crossword' ? Date.now() + 10000 : null;
+      set({ answerError: true, guessLockoutEnd: lockout });
     }
   },
 

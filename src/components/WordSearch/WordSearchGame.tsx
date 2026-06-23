@@ -452,6 +452,27 @@ export function WordSearchGame() {
           })}
         </div>
 
+        {/* Answer */}
+        <div className="ws-answer-area">
+          <div className="ws-answer-row">
+            <input
+              className={`ws-answer-input ${answerError ? 'ws-answer-error' : ''}`}
+              type="text"
+              placeholder={locked ? `Find all words first (${foundCount}/${totalCount})` : 'Your answer…'}
+              value={answer}
+              onChange={e => setAnswer(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !locked && handleSubmit()}
+              disabled={locked}
+              autoCorrect="off"
+              autoCapitalize="words"
+              spellCheck={false}
+            />
+            <button className="ws-submit-btn" onClick={handleSubmit} disabled={!answer.trim() || locked}>
+              Guess
+            </button>
+          </div>
+        </div>
+
         {/* Grid */}
         <div className="ws-grid-wrap">
           <div
@@ -490,16 +511,6 @@ export function WordSearchGame() {
           </div>
         </div>
 
-        {/* Progress row */}
-        <div className="ws-progress-row">
-          <div className="ws-progress">
-            {uniqueHiddenWords.map((_, i) => (
-              <div key={i} className={`ws-progress-dot ${foundWordIndices.has(i) ? 'ws-progress-dot-found' : ''}`} />
-            ))}
-            <span className="ws-progress-label">{foundCount}/{totalCount}</span>
-          </div>
-        </div>
-
         {/* Hint meter */}
         {!allFound && (
           <div className={`ws-hint-row${available >= options.hintCost ? ' ws-hint-full' : ''}`}>
@@ -509,30 +520,6 @@ export function WordSearchGame() {
             </div>
           </div>
         )}
-
-        {/* Answer */}
-        <div className="ws-answer-area">
-          <span className="ws-answer-label">
-            {locked ? `Find all words first (${foundCount}/${totalCount})` : 'What is the answer?'}
-          </span>
-          <div className="ws-answer-row">
-            <input
-              className={`ws-answer-input ${answerError ? 'ws-answer-error' : ''}`}
-              type="text"
-              placeholder="Your answer…"
-              value={answer}
-              onChange={e => setAnswer(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !locked && handleSubmit()}
-              disabled={locked}
-              autoCorrect="off"
-              autoCapitalize="words"
-              spellCheck={false}
-            />
-            <button className="ws-submit-btn" onClick={handleSubmit} disabled={!answer.trim() || locked}>
-              Guess
-            </button>
-          </div>
-        </div>
 
       </div>
 

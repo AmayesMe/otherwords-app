@@ -1,9 +1,17 @@
 import './WordSearchGame.css';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWordSearchStore, DEFAULT_OPTIONS } from '../../store/wordSearchStore';
 import { useGameStore } from '../../store/gameStore';
 import { cellKey, MIN_GRID_SIZE, MAX_GRID_SIZE } from '../../wordSearch/gridGenerator';
 import type { WordSearchOptions } from '../../store/wordSearchStore';
+import type { CellCoord } from '../../wordSearch/types';
+
+function formatTime(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 export function WordSearchGame() {
   const {
@@ -15,6 +23,7 @@ export function WordSearchGame() {
     options,
     foundWordIndices,
     bonusCells,
+    bonusSelections,
     bonusPoints,
     hintsUsed,
     hintedLetters,
@@ -22,6 +31,8 @@ export function WordSearchGame() {
     selectionCells,
     answerError,
     gameWon,
+    startTime,
+    endTime,
     startPuzzle,
     startSelecting,
     updateSelection,
@@ -39,7 +50,15 @@ export function WordSearchGame() {
     ...options,
   });
   const [started, setStarted] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Live timer
+  useEffect(() => {
+    if (!started || gameWon || !startTime) return;
+    const id = setInterval(() => setElapsed(Date.now() - startTime), 500);
+    return () => clearInterval(id);
+  }, [started, gameWon, startTime]);
 
   // Clear error after short delay
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,11 +122,15 @@ export function WordSearchGame() {
     startPuzzle(undefined, localOptions);
     setStarted(true);
     setAnswer('');
+    setElapsed(0);
   }
 
   function handlePlayAgain() {
     setStarted(false);
   }
+
+  const finalTime = endTime && startTime ? endTime - startTime : null;
+  const isLoopMode = options.selectionMode === 'loop';
 
   // ── Options screen ────────────────────────────────────────────────────────
 
@@ -173,6 +196,28 @@ export function WordSearchGame() {
             </button>
           </div>
 
+          {/* Selection mode */}
+          <div className="ws-option-row">
+            <label className="ws-option-label">
+              Found word style
+              <span className="ws-option-desc">How found words are highlighted</span>
+            </label>
+            <div className="ws-mode-toggle">
+              <button
+                className={`ws-mode-btn ${localOptions.selectionMode === 'block' ? 'ws-mode-btn-active' : ''}`}
+                onClick={() => setLocalOptions(o => ({ ...o, selectionMode: 'block' }))}
+              >
+                Block
+              </button>
+              <button
+                className={`ws-mode-btn ${localOptions.selectionMode === 'loop' ? 'ws-mode-btn-active' : ''}`}
+                onClick={() => setLocalOptions(o => ({ ...o, selectionMode: 'loop' }))}
+              >
+                Loop
+              </button>
+            </div>
+          </div>
+
           <button className="ws-start-btn" onClick={handleStart}>Play</button>
         </div>
       </div>
@@ -184,6 +229,73 @@ export function WordSearchGame() {
   const foundCount = foundWordIndices.size;
   const totalCount = uniqueHiddenWords.length;
 
+  // ── Loop mode SVG lines ───────────────────────────────────────────────────
+
+  function renderLoopOverlay() {
+    const lines: React.ReactNode[] = [];
+
+    // Found clue word placements
+    for (const p of placements) {
+      if (!foundWordIndices.has(p.wordIndex)) continue;
+      if (p.cells.length < 2) continue;
+      const first = p.cells[0];
+      const last = p.cells[p.cells.length - 1];
+      lines.push(
+        <line
+          key={`w-${p.wordIndex}`}
+          x1={first.col + 0.5} y1={first.row + 0.5}
+          x2={last.col + 0.5}  y2={last.row + 0.5}
+          strokeLinecap="round"
+          strokeWidth={0.85}
+          stroke="rgba(42, 107, 60, 0.55)"
+        />
+      );
+    }
+
+    // Bonus word selections
+    bonusSelections.forEach((sel: CellCoord[], idx: number) => {
+      if (sel.length < 2) return;
+      const first = sel[0];
+      const last = sel[sel.length - 1];
+      lines.push(
+        <line
+          key={`b-${idx}`}
+          x1={first.col + 0.5} y1={first.row + 0.5}
+          x2={last.col + 0.5}  y2={last.row + 0.5}
+          strokeLinecap="round"
+          strokeWidth={0.85}
+          stroke="rgba(200, 200, 200, 0.28)"
+        />
+      );
+    });
+
+    // Active selection preview
+    if (isSelecting && selectionCells.length >= 2) {
+      const first = selectionCells[0];
+      const last = selectionCells[selectionCells.length - 1];
+      lines.push(
+        <line
+          key="sel"
+          x1={first.col + 0.5} y1={first.row + 0.5}
+          x2={last.col + 0.5}  y2={last.row + 0.5}
+          strokeLinecap="round"
+          strokeWidth={0.85}
+          stroke="rgba(232, 184, 48, 0.7)"
+        />
+      );
+    }
+
+    return (
+      <svg
+        className="ws-grid-svg"
+        viewBox={`0 0 ${gridSize} ${gridSize}`}
+        preserveAspectRatio="none"
+      >
+        {lines}
+      </svg>
+    );
+  }
+
   // ── Game screen ───────────────────────────────────────────────────────────
 
   return (
@@ -193,6 +305,7 @@ export function WordSearchGame() {
         <div className="ws-header">
           <button className="ws-back-btn" onClick={resetToLobby} title="Back to lobby">✕</button>
           <span className="ws-title">Word Search</span>
+          <span className="ws-timer">{formatTime(elapsed)}</span>
         </div>
 
         {/* Clue */}
@@ -223,7 +336,7 @@ export function WordSearchGame() {
         <div className="ws-grid-wrap">
           <div
             ref={gridRef}
-            className="ws-grid"
+            className={`ws-grid${isLoopMode ? ' ws-grid-loop' : ''}`}
             style={{
               '--grid-size': gridSize,
               gridTemplateColumns: `repeat(${gridSize}, var(--cell))`,
@@ -240,12 +353,17 @@ export function WordSearchGame() {
                 const isFound = foundCells.has(key);
                 const isBonus = !isFound && bonusCells.has(key);
                 let cls = 'ws-cell';
-                if (isFound) cls += ' ws-cell-found';
-                else if (isBonus) cls += ' ws-cell-bonus';
-                if (isSel) cls += ' ws-cell-selected';
+                if (!isLoopMode) {
+                  if (isFound) cls += ' ws-cell-found';
+                  else if (isBonus) cls += ' ws-cell-bonus';
+                  if (isSel) cls += ' ws-cell-selected';
+                } else {
+                  if (isSel) cls += ' ws-cell-selected';
+                }
                 return <div key={key} className={cls}>{letter}</div>;
               }),
             )}
+            {isLoopMode && renderLoopOverlay()}
           </div>
         </div>
 
@@ -297,6 +415,9 @@ export function WordSearchGame() {
         <div className="ws-win">
           <div className="ws-win-title">Correct!</div>
           <div className="ws-win-answer">{puzzle.answer}</div>
+          {finalTime !== null && (
+            <div className="ws-win-time">Time: {formatTime(finalTime)}</div>
+          )}
           <button className="ws-win-btn" onClick={handlePlayAgain}>Play Again</button>
           <button className="ws-win-btn" onClick={resetToLobby}>Back to Menu</button>
         </div>

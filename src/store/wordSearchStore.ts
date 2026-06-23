@@ -11,12 +11,14 @@ export interface WordSearchOptions {
   allowBackward: boolean;
   gridSize: number;
   hintCost: number;
+  selectionMode: 'block' | 'loop';
 }
 
 export const DEFAULT_OPTIONS: WordSearchOptions = {
   allowBackward: false,
   gridSize: DEFAULT_GRID_SIZE,
   hintCost: 8,
+  selectionMode: 'block',
 };
 
 function pathKey(cells: CellCoord[]) {
@@ -37,10 +39,14 @@ interface WordSearchState {
   bonusPoints: number;
   hintsUsed: number;
   hintedLetters: Map<number, Set<number>>;
+  bonusSelections: CellCoord[][];
 
   isSelecting: boolean;
   selectionStart: CellCoord | null;
   selectionCells: CellCoord[];
+
+  startTime: number | null;
+  endTime: number | null;
 
   answerError: boolean;
   gameWon: boolean;
@@ -58,6 +64,7 @@ function findMatchingPlacement(
   selectedCells: CellCoord[],
   placements: WordPlacement[],
   foundWordIndices: Set<number>,
+  allowBackward: boolean,
 ): number | null {
   for (const p of placements) {
     if (foundWordIndices.has(p.wordIndex)) continue;
@@ -66,12 +73,14 @@ function findMatchingPlacement(
       (c, i) => c.row === selectedCells[i].row && c.col === selectedCells[i].col,
     );
     if (forward) return p.wordIndex;
-    const reverse = p.cells.every(
-      (c, i) =>
-        c.row === selectedCells[selectedCells.length - 1 - i].row &&
-        c.col === selectedCells[selectedCells.length - 1 - i].col,
-    );
-    if (reverse) return p.wordIndex;
+    if (allowBackward) {
+      const reverse = p.cells.every(
+        (c, i) =>
+          c.row === selectedCells[selectedCells.length - 1 - i].row &&
+          c.col === selectedCells[selectedCells.length - 1 - i].col,
+      );
+      if (reverse) return p.wordIndex;
+    }
   }
   return null;
 }
@@ -93,9 +102,12 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   bonusPoints: 0,
   hintsUsed: 0,
   hintedLetters: new Map(),
+  bonusSelections: [],
   isSelecting: false,
   selectionStart: null,
   selectionCells: [],
+  startTime: null,
+  endTime: null,
   answerError: false,
   gameWon: false,
 
@@ -117,9 +129,12 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       bonusPoints: 0,
       hintsUsed: 0,
       hintedLetters: new Map(),
+      bonusSelections: [],
       isSelecting: false,
       selectionStart: null,
       selectionCells: [],
+      startTime: Date.now(),
+      endTime: null,
       answerError: false,
       gameWon: false,
     });
@@ -130,9 +145,9 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   },
 
   updateSelection(row, col) {
-    const { isSelecting, selectionStart, gridSize } = get();
+    const { isSelecting, selectionStart, gridSize, options } = get();
     if (!isSelecting || !selectionStart) return;
-    const cells = computeSelection(selectionStart.row, selectionStart.col, row, col, gridSize);
+    const cells = computeSelection(selectionStart.row, selectionStart.col, row, col, gridSize, options.allowBackward);
     set({ selectionCells: cells });
   },
 
@@ -140,6 +155,7 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
     const {
       selectionCells, placements, foundWordIndices,
       grid, uniqueHiddenWords, bonusCells, foundBonusPaths, bonusPoints,
+      options, bonusSelections,
     } = get();
 
     if (selectionCells.length < 2) {
@@ -147,6 +163,7 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       return;
     }
 
+    const { allowBackward } = options;
     const key = pathKey(selectionCells);
     const newFoundWordIndices = new Set(foundWordIndices);
     const newBonusCells = new Set(bonusCells);
@@ -154,21 +171,25 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
     let earned = 0;
 
     const extracted = selectionCells.map(c => grid[c.row][c.col]).join('');
-    const extractedRev = extracted.split('').reverse().join('');
+    const extractedRev = allowBackward ? extracted.split('').reverse().join('') : '';
 
     // 1. Exact placement cell match
-    let clueMatchIndex = findMatchingPlacement(selectionCells, placements, newFoundWordIndices);
+    let clueMatchIndex = findMatchingPlacement(selectionCells, placements, newFoundWordIndices, allowBackward);
 
     // 2. String match anywhere in grid
     if (clueMatchIndex === null) {
       for (let wi = 0; wi < uniqueHiddenWords.length; wi++) {
         if (newFoundWordIndices.has(wi)) continue;
-        if (extracted === uniqueHiddenWords[wi] || extractedRev === uniqueHiddenWords[wi]) {
+        const matchFwd = extracted === uniqueHiddenWords[wi];
+        const matchRev = allowBackward && extractedRev === uniqueHiddenWords[wi];
+        if (matchFwd || matchRev) {
           clueMatchIndex = wi;
           break;
         }
       }
     }
+
+    const newBonusSelections = [...bonusSelections];
 
     if (clueMatchIndex !== null) {
       newFoundWordIndices.add(clueMatchIndex);
@@ -177,10 +198,13 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
         newFoundBonusPaths.add(key);
       }
     } else if (!newFoundBonusPaths.has(key)) {
-      if (isValidWord(extracted.toLowerCase())) {
+      const dictWord = extracted.toLowerCase();
+      const dictWordRev = allowBackward ? extractedRev.toLowerCase() : '';
+      if (isValidWord(dictWord) || (allowBackward && isValidWord(dictWordRev))) {
         for (const c of selectionCells) newBonusCells.add(cellKey(c.row, c.col));
         earned += selectionCells.length;
         newFoundBonusPaths.add(key);
+        newBonusSelections.push([...selectionCells]);
       }
     }
 
@@ -191,6 +215,7 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       bonusCells: newBonusCells,
       foundBonusPaths: newFoundBonusPaths,
       bonusPoints: bonusPoints + earned,
+      bonusSelections: newBonusSelections,
     });
   },
 
@@ -231,7 +256,7 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
     const { puzzle } = get();
     if (!puzzle) return;
     const correct = answer.trim().toLowerCase() === puzzle.answer.trim().toLowerCase();
-    if (correct) set({ gameWon: true });
+    if (correct) set({ gameWon: true, endTime: Date.now() });
     else set({ answerError: true });
   },
 

@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { generateGrid, getUniqueHiddenWords, computeSelection, cellKey,
-         DEFAULT_GRID_SIZE } from '../wordSearch/gridGenerator';
+import { generateGrid, getUniqueHiddenWords, computeSelection, cellKey } from '../wordSearch/gridGenerator';
 import { PUZZLES } from '../wordSearch/puzzles';
 import { loadDictionary, isValidWord } from '../game/dictionary';
 import type { CellCoord, Puzzle, WordPlacement } from '../wordSearch/types';
@@ -13,14 +12,16 @@ export interface WordSearchOptions {
   hintCost: number;
   selectionMode: 'block' | 'loop';
   requireAllFound: boolean;
+  soundEnabled: boolean;
 }
 
 export const DEFAULT_OPTIONS: WordSearchOptions = {
   allowBackward: false,
-  gridSize: DEFAULT_GRID_SIZE,
-  hintCost: 8,
-  selectionMode: 'block',
+  gridSize: 10,
+  hintCost: 10,
+  selectionMode: 'loop',
   requireAllFound: false,
+  soundEnabled: true,
 };
 
 function pathKey(cells: CellCoord[]) {
@@ -100,7 +101,7 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   grid: [],
   placements: [],
   uniqueHiddenWords: [],
-  gridSize: DEFAULT_GRID_SIZE,
+  gridSize: DEFAULT_OPTIONS.gridSize,
   options: DEFAULT_OPTIONS,
   foundWordIndices: new Set(),
   foundWordCells: new Map(),

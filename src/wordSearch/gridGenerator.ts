@@ -116,16 +116,13 @@ export function generateGrid(
   return { grid, placements };
 }
 
-/** Extract unique words from a clue that are long enough to hide in the grid. */
+/** Extract words from a clue that are long enough to hide in the grid.
+ *  Preserves duplicates so every clue-word occurrence gets its own grid placement. */
 export function getUniqueHiddenWords(clueWords: string[]): string[] {
-  const seen = new Set<string>();
   const result: string[] = [];
   for (const w of clueWords) {
     const upper = w.toUpperCase().replace(/[^A-Z]/g, '');
-    if (upper.length >= 3 && !seen.has(upper)) {
-      seen.add(upper);
-      result.push(upper);
-    }
+    if (upper.length >= 3) result.push(upper);
   }
   return result;
 }

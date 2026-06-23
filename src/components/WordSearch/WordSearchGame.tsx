@@ -6,7 +6,7 @@ import { cellKey, MIN_GRID_SIZE, MAX_GRID_SIZE } from '../../wordSearch/gridGene
 import type { WordSearchOptions } from '../../store/wordSearchStore';
 import type { CellCoord } from '../../wordSearch/types';
 import {
-  resumeAudio, sfxHintGiven, sfxWordFound, sfxBonusWord,
+  resumeAudio, sfxHintGiven, sfxWordFound, sfxBonusLetters,
   sfxCorrectAnswer, sfxWrongAnswer, sfxNotFound,
 } from '../../wordSearch/sounds';
 
@@ -28,11 +28,29 @@ function pillPath(x1: number, y1: number, x2: number, y2: number, r: number): st
   const ny = (dx / len) * r;
   return [
     `M ${x1 + nx},${y1 + ny}`,
-    `A ${r},${r},0,0,0,${x1 - nx},${y1 - ny}`,
+    `A ${r},${r},0,0,1,${x1 - nx},${y1 - ny}`,
     `L ${x2 - nx},${y2 - ny}`,
     `A ${r},${r},0,0,1,${x2 + nx},${y2 + ny}`,
     'Z',
   ].join(' ');
+}
+
+/** Maps clue position i → index in uniqueHiddenWords (handles duplicates). Returns -1 if not tracked. */
+function clueWordIdx(clueWords: string[], hidden: string[], i: number): number {
+  const upper = clueWords[i].toUpperCase().replace(/[^A-Z]/g, '');
+  if (upper.length < 3) return -1;
+  let occurrence = 0;
+  for (let j = 0; j < i; j++) {
+    if (clueWords[j].toUpperCase().replace(/[^A-Z]/g, '') === upper) occurrence++;
+  }
+  let count = 0;
+  for (let j = 0; j < hidden.length; j++) {
+    if (hidden[j] === upper) {
+      if (count === occurrence) return j;
+      count++;
+    }
+  }
+  return -1;
 }
 
 export function WordSearchGame() {
@@ -69,6 +87,19 @@ export function WordSearchGame() {
   const prevHintedLettersRef  = useRef(new Map<number, Set<number>>());
   const prevSelectionCountRef = useRef(0);
 
+  // Meter animation refs
+  const meterValueRef     = useRef(0);
+  const pendingLettersRef = useRef(0);
+  const hintCostRef       = useRef(options.hintCost);
+  const meterStepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevBonusLenRef   = useRef(0);
+
+  // Keep hintCostRef current on every render
+  hintCostRef.current = options.hintCost;
+
+  // Sound helper — respects soundEnabled setting
+  const sfx = (fn: () => void) => { if (options.soundEnabled) fn(); };
+
   // ── Timer ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!started || gameWon || !startTime) return;
@@ -76,26 +107,47 @@ export function WordSearchGame() {
     return () => clearInterval(id);
   }, [started, gameWon, startTime]);
 
-  // ── Auto-hint meter ────────────────────────────────────────────────────────
-  const hintCost        = options.hintCost;
-  const hasHintTargets  = uniqueHiddenWords.some((_, wi) => !foundWordIndices.has(wi));
-  const available       = bonusPoints - hintsUsed * hintCost;
-
+  // ── Bonus word: ascending sounds + letter-by-letter meter fill ─────────────
   useEffect(() => {
-    if (!started || gameWon) return;
-    if (available >= hintCost && hasHintTargets && !meterFull) {
-      setMeterFull(true);
-      setMeterValue(100);
-      const t = setTimeout(() => {
-        buyHint();
-        setMeterFull(false);
-        setMeterValue(0);
-      }, 700);
-      return () => clearTimeout(t);
-    } else if (!meterFull) {
-      setMeterValue(Math.max(0, Math.min(99, (available / hintCost) * 100)));
-    }
-  }, [bonusPoints, hintsUsed, meterFull, started, gameWon]); // eslint-disable-line
+    const newLen = bonusSelections.length;
+    if (newLen <= prevBonusLenRef.current) return;
+    prevBonusLenRef.current = newLen;
+
+    const wordLen = bonusSelections[newLen - 1].length;
+    if (options.soundEnabled) sfxBonusLetters(wordLen);
+
+    pendingLettersRef.current += wordLen;
+
+    if (meterStepTimerRef.current) return; // already running
+    meterStepTimerRef.current = setInterval(() => {
+      if (pendingLettersRef.current <= 0) {
+        clearInterval(meterStepTimerRef.current!);
+        meterStepTimerRef.current = null;
+        return;
+      }
+      pendingLettersRef.current--;
+      meterValueRef.current = Math.min(100, meterValueRef.current + 100 / hintCostRef.current);
+      setMeterValue(meterValueRef.current);
+      if (meterValueRef.current >= 100) {
+        clearInterval(meterStepTimerRef.current!);
+        meterStepTimerRef.current = null;
+        pendingLettersRef.current = 0;
+        setMeterFull(true);
+      }
+    }, 100);
+  }, [bonusSelections.length]); // eslint-disable-line
+
+  // ── When meter full, buy hint after pulse animation ────────────────────────
+  useEffect(() => {
+    if (!meterFull) return;
+    const t = setTimeout(() => {
+      buyHint();
+      meterValueRef.current = 0;
+      setMeterFull(false);
+      setMeterValue(0);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [meterFull]); // eslint-disable-line
 
   // ── Word found fanfare ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -107,7 +159,7 @@ export function WordSearchGame() {
         const cells = foundWordCells.get(wi)
           ?? placements.find(p => p.wordIndex === wi)?.cells ?? [];
         setJustFoundCells(new Set(cells.map(c => cellKey(c.row, c.col))));
-        sfxWordFound();
+        sfx(sfxWordFound);
         t1 = setTimeout(() => setFanfareIdx(null), 800);
         t2 = setTimeout(() => setJustFoundCells(new Set()), 600);
         break;
@@ -124,8 +176,7 @@ export function WordSearchGame() {
       const prev = prevHintedLettersRef.current.get(wi) ?? new Set<number>();
       for (const li of indices) {
         if (!prev.has(li)) {
-          // Skip hint sound if this completed the word (sfxWordFound takes over)
-          if (!foundWordIndices.has(wi)) sfxHintGiven();
+          if (!foundWordIndices.has(wi)) sfx(sfxHintGiven);
           setHintRevealPos({ wi, li });
           cleanupTimer = setTimeout(() => setHintRevealPos(null), 600);
           break loop;
@@ -140,14 +191,13 @@ export function WordSearchGame() {
   useEffect(() => {
     if (selectionCount > prevSelectionCountRef.current) {
       prevSelectionCountRef.current = selectionCount;
-      if (lastSelectionResult === 'bonus')   sfxBonusWord();
-      else if (lastSelectionResult === 'nothing') sfxNotFound();
+      if (lastSelectionResult === 'nothing') sfx(sfxNotFound);
     }
-  }, [selectionCount, lastSelectionResult]);
+  }, [selectionCount, lastSelectionResult]); // eslint-disable-line
 
   // ── Answer sounds ──────────────────────────────────────────────────────────
-  useEffect(() => { if (gameWon) sfxCorrectAnswer(); }, [gameWon]);
-  useEffect(() => { if (answerError) sfxWrongAnswer(); }, [answerError]);
+  useEffect(() => { if (gameWon) sfx(sfxCorrectAnswer); }, [gameWon]); // eslint-disable-line
+  useEffect(() => { if (answerError) sfx(sfxWrongAnswer); }, [answerError]); // eslint-disable-line
 
   // ── Error clear ────────────────────────────────────────────────────────────
   if (answerError && !errorTimerRef.current) {
@@ -169,6 +219,11 @@ export function WordSearchGame() {
     }
   }
 
+  // Maps each clue word position → its uniqueHiddenWords index (handles duplicates)
+  const clueWordToHiddenIdx = puzzle
+    ? puzzle.clueWords.map((_, i) => clueWordIdx(puzzle.clueWords, uniqueHiddenWords, i))
+    : [];
+
   function getPointerCell(e: React.PointerEvent): { row: number; col: number } | null {
     const rect = gridRef.current?.getBoundingClientRect();
     if (!rect) return null;
@@ -179,8 +234,6 @@ export function WordSearchGame() {
   }
 
   function handlePointerDown(e: React.PointerEvent) {
-    // NOTE: do NOT call e.preventDefault() here — iOS Safari suppresses
-    // subsequent pointermove events when pointerdown is prevented.
     resumeAudio();
     e.stopPropagation();
     const cell = getPointerCell(e);
@@ -191,7 +244,7 @@ export function WordSearchGame() {
 
   function handlePointerMove(e: React.PointerEvent) {
     if (!isSelecting) return;
-    e.preventDefault(); // prevent scroll while dragging
+    e.preventDefault();
     const cell = getPointerCell(e);
     if (!cell) return;
     updateSelection(cell.row, cell.col);
@@ -214,6 +267,7 @@ export function WordSearchGame() {
   }
 
   function handleStart() {
+    resumeAudio();
     startPuzzle(undefined, localOptions);
     setStarted(true);
     setAnswer('');
@@ -223,15 +277,30 @@ export function WordSearchGame() {
     setFanfareIdx(null);
     setJustFoundCells(new Set());
     setHintRevealPos(null);
+    // Reset meter animation state
+    meterValueRef.current = 0;
+    pendingLettersRef.current = 0;
+    if (meterStepTimerRef.current) {
+      clearInterval(meterStepTimerRef.current);
+      meterStepTimerRef.current = null;
+    }
     prevFoundIndicesRef.current   = new Set();
     prevHintedLettersRef.current  = new Map();
     prevSelectionCountRef.current = 0;
+    prevBonusLenRef.current       = 0;
   }
 
   function handlePlayAgain() {
+    resumeAudio();
     setStarted(false);
     setMeterFull(false);
     setMeterValue(0);
+    meterValueRef.current = 0;
+    pendingLettersRef.current = 0;
+    if (meterStepTimerRef.current) {
+      clearInterval(meterStepTimerRef.current);
+      meterStepTimerRef.current = null;
+    }
   }
 
   const finalTime  = endTime && startTime ? endTime - startTime : null;
@@ -242,6 +311,7 @@ export function WordSearchGame() {
   if (!started) {
     return (
       <div className="ws-container">
+        <span className="ws-build-ver">{__BUILD_TS__}</span>
         <div className="ws-options">
           <button className="ws-back-btn ws-options-back" onClick={resetToLobby}>✕</button>
           <h2 className="ws-options-title">Word Search</h2>
@@ -308,6 +378,18 @@ export function WordSearchGame() {
             </button>
           </div>
 
+          <div className="ws-option-row">
+            <label className="ws-option-label">
+              Sound effects
+              <span className="ws-option-desc">Audio feedback for game events</span>
+            </label>
+            <button role="switch" aria-checked={localOptions.soundEnabled}
+              className={`ws-toggle ${localOptions.soundEnabled ? 'ws-toggle-on' : ''}`}
+              onClick={() => setLocalOptions(o => ({ ...o, soundEnabled: !o.soundEnabled }))}>
+              <span className="ws-toggle-thumb" />
+            </button>
+          </div>
+
           <button className="ws-start-btn" onClick={handleStart}>Play</button>
         </div>
       </div>
@@ -336,7 +418,6 @@ export function WordSearchGame() {
           fill="rgba(42, 107, 60, 0.10)" stroke="rgba(42, 107, 60, 0.80)" strokeWidth={0.07} />
       );
 
-      // Gray pill at original placement if found later at different location
       const actualCells = foundWordCells.get(wi);
       if (actualCells) {
         const placement = placements.find(p => p.wordIndex === wi);
@@ -389,6 +470,7 @@ export function WordSearchGame() {
   // ── Game screen ───────────────────────────────────────────────────────────
   return (
     <div className="ws-container">
+      <span className="ws-build-ver">{__BUILD_TS__}</span>
       <div className="ws-game">
 
         <div className="ws-header">
@@ -404,9 +486,9 @@ export function WordSearchGame() {
             if (upper.length < 3) {
               return <span key={i} className="ws-clue-word ws-clue-word-revealed">{upper || word.toUpperCase()}</span>;
             }
-            const idx = uniqueHiddenWords.indexOf(upper);
+            const idx = clueWordToHiddenIdx[i];
             if (idx === -1 || foundWordIndices.has(idx)) {
-              const isFanfare = fanfareIdx === idx;
+              const isFanfare = fanfareIdx === idx && idx !== -1;
               return (
                 <span key={i}
                   className={`ws-clue-word ws-clue-word-revealed${isFanfare ? ' ws-clue-word-fanfare' : ''}`}>
@@ -482,7 +564,7 @@ export function WordSearchGame() {
           <span className="ws-bonus-score">+{bonusPoints}</span>
         </div>
 
-        {/* Hint meter — hidden once all words found */}
+        {/* Hint meter */}
         {!allFound && (
           <div className={`ws-hint-row${meterFull ? ' ws-hint-full' : ''}`}>
             <span className="ws-hint-row-label">Hint</span>

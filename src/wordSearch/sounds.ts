@@ -50,9 +50,17 @@ export function sfxWordFound(): void {
   note(784, 0.2, 0.28, 0.38);
 }
 
-/** Single soft ding — bonus dictionary word found */
+/** Single soft ding — bonus dictionary word found (legacy, prefer sfxBonusLetters) */
 export function sfxBonusWord(): void {
   note(660, 0, 0.12, 0.18);
+}
+
+/** Ascending ding sequence — one note per letter in a found bonus word */
+export function sfxBonusLetters(count: number): void {
+  for (let i = 0; i < count; i++) {
+    // One semitone per letter, starting at A4 (440 Hz)
+    note(440 * Math.pow(2, i / 12), i * 0.11, 0.09, 0.20, 'sine');
+  }
 }
 
 /** Victory arpeggio — correct answer */

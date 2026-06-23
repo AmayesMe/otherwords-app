@@ -12,6 +12,7 @@ export interface WordSearchOptions {
   gridSize: number;
   hintCost: number;
   selectionMode: 'block' | 'loop';
+  requireAllFound: boolean;
 }
 
 export const DEFAULT_OPTIONS: WordSearchOptions = {
@@ -19,6 +20,7 @@ export const DEFAULT_OPTIONS: WordSearchOptions = {
   gridSize: DEFAULT_GRID_SIZE,
   hintCost: 8,
   selectionMode: 'block',
+  requireAllFound: false,
 };
 
 function pathKey(cells: CellCoord[]) {
@@ -37,6 +39,8 @@ interface WordSearchState {
   foundWordCells: Map<number, CellCoord[]>;   // actual cells player selected when finding word wi
   revealedOriginalCells: Set<number>;          // cellKeys of original placements found after the fact
   bonusCells: Set<number>;
+  lastSelectionResult: 'word' | 'bonus' | 'original' | 'nothing' | null;
+  selectionCount: number;
   foundBonusPaths: Set<string>;
   bonusPoints: number;
   hintsUsed: number;
@@ -102,6 +106,8 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   foundWordCells: new Map(),
   revealedOriginalCells: new Set(),
   bonusCells: new Set(),
+  lastSelectionResult: null,
+  selectionCount: 0,
   foundBonusPaths: new Set(),
   bonusPoints: 0,
   hintsUsed: 0,
@@ -131,6 +137,8 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       foundWordCells: new Map(),
       revealedOriginalCells: new Set(),
       bonusCells: new Set(),
+      lastSelectionResult: null,
+      selectionCount: 0,
       foundBonusPaths: new Set(),
       bonusPoints: 0,
       hintsUsed: 0,
@@ -161,7 +169,7 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
     const {
       selectionCells, placements, foundWordIndices, foundWordCells,
       grid, uniqueHiddenWords, bonusCells, foundBonusPaths, bonusPoints,
-      options, bonusSelections, revealedOriginalCells,
+      options, bonusSelections, revealedOriginalCells, selectionCount,
     } = get();
 
     if (selectionCells.length < 2) {
@@ -198,6 +206,8 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
     }
 
     const newBonusSelections = [...bonusSelections];
+    let selectionResult: 'word' | 'bonus' | 'original' | 'nothing' = 'nothing';
+    let originalFound = false;
 
     if (clueMatchIndex !== null) {
       newFoundWordIndices.add(clueMatchIndex);
@@ -206,20 +216,19 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
         earned += selectionCells.length;
         newFoundBonusPaths.add(key);
       }
+      selectionResult = 'word';
     } else {
       // Check if this selection lands on the original placement of an already-found word
       // (found at a different location) — mark those cells as gray "also-found"
       for (const p of placements) {
         if (!newFoundWordIndices.has(p.wordIndex)) continue;
         const actual = newFoundWordCells.get(p.wordIndex);
-        if (!actual) continue; // hint-revealed words don't need this treatment
-        // Skip if the word was already found at its original location
+        if (!actual) continue;
         const sameAsFwd = actual.length === p.cells.length &&
           p.cells.every((c, i) => c.row === actual[i].row && c.col === actual[i].col);
         const sameAsRev = actual.length === p.cells.length &&
           p.cells.every((c, i) => c.row === actual[actual.length - 1 - i].row && c.col === actual[actual.length - 1 - i].col);
         if (sameAsFwd || sameAsRev) continue;
-        // Check if current selection matches the original placement
         if (selectionCells.length !== p.cells.length) continue;
         const matchFwd = p.cells.every((c, i) => c.row === selectionCells[i].row && c.col === selectionCells[i].col);
         const matchRev = allowBackward && p.cells.every((c, i) =>
@@ -227,10 +236,12 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
           c.col === selectionCells[selectionCells.length - 1 - i].col);
         if (matchFwd || matchRev) {
           for (const c of p.cells) newRevealedOriginalCells.add(cellKey(c.row, c.col));
+          originalFound = true;
         }
       }
 
-      if (!newFoundBonusPaths.has(key)) {
+      // Bonus words require 3+ letters
+      if (!newFoundBonusPaths.has(key) && selectionCells.length >= 3) {
         const dictWord = extracted.toLowerCase();
         const dictWordRev = allowBackward ? extractedRev.toLowerCase() : '';
         if (isValidWord(dictWord) || (allowBackward && isValidWord(dictWordRev))) {
@@ -238,8 +249,11 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
           earned += selectionCells.length;
           newFoundBonusPaths.add(key);
           newBonusSelections.push([...selectionCells]);
+          selectionResult = 'bonus';
         }
       }
+
+      if (selectionResult === 'nothing' && originalFound) selectionResult = 'original';
     }
 
     set({
@@ -252,6 +266,8 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       foundBonusPaths: newFoundBonusPaths,
       bonusPoints: bonusPoints + earned,
       bonusSelections: newBonusSelections,
+      lastSelectionResult: selectionResult,
+      selectionCount: selectionCount + 1,
     });
   },
 

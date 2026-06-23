@@ -29,7 +29,7 @@ function pillPath(x1: number, y1: number, x2: number, y2: number, r: number): st
     `M ${x1 + nx},${y1 + ny}`,
     `A ${r},${r},0,0,0,${x1 - nx},${y1 - ny}`,
     `L ${x2 - nx},${y2 - ny}`,
-    `A ${r},${r},0,0,0,${x2 + nx},${y2 + ny}`,
+    `A ${r},${r},0,0,1,${x2 + nx},${y2 + ny}`,
     'Z',
   ].join(' ');
 }
@@ -248,6 +248,22 @@ export function WordSearchGame() {
             </div>
           </div>
 
+          {/* Require all words found */}
+          <div className="ws-option-row">
+            <label className="ws-option-label">
+              Require all words found
+              <span className="ws-option-desc">Must find every clue word before guessing the answer</span>
+            </label>
+            <button
+              role="switch"
+              aria-checked={localOptions.requireAllFound}
+              className={`ws-toggle ${localOptions.requireAllFound ? 'ws-toggle-on' : ''}`}
+              onClick={() => setLocalOptions(o => ({ ...o, requireAllFound: !o.requireAllFound }))}
+            >
+              <span className="ws-toggle-thumb" />
+            </button>
+          </div>
+
           <button className="ws-start-btn" onClick={handleStart}>Play</button>
         </div>
       </div>
@@ -450,25 +466,34 @@ export function WordSearchGame() {
         </div>
 
         {/* Answer */}
-        <div className="ws-answer-area">
-          <span className="ws-answer-label">What is the answer?</span>
-          <div className="ws-answer-row">
-            <input
-              className={`ws-answer-input ${answerError ? 'ws-answer-error' : ''}`}
-              type="text"
-              placeholder="Your answer…"
-              value={answer}
-              onChange={e => setAnswer(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-              autoCorrect="off"
-              autoCapitalize="words"
-              spellCheck={false}
-            />
-            <button className="ws-submit-btn" onClick={handleSubmit} disabled={!answer.trim()}>
-              Guess
-            </button>
-          </div>
-        </div>
+        {(() => {
+          const allFound = foundWordIndices.size >= uniqueHiddenWords.length;
+          const locked = options.requireAllFound && !allFound;
+          return (
+            <div className="ws-answer-area">
+              <span className="ws-answer-label">
+                {locked ? `Find all words first (${foundCount}/${totalCount})` : 'What is the answer?'}
+              </span>
+              <div className="ws-answer-row">
+                <input
+                  className={`ws-answer-input ${answerError ? 'ws-answer-error' : ''}`}
+                  type="text"
+                  placeholder="Your answer…"
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !locked && handleSubmit()}
+                  disabled={locked}
+                  autoCorrect="off"
+                  autoCapitalize="words"
+                  spellCheck={false}
+                />
+                <button className="ws-submit-btn" onClick={handleSubmit} disabled={!answer.trim() || locked}>
+                  Guess
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
       </div>
 

@@ -1,6 +1,6 @@
 import './WordSearchGame.css';
 import { useEffect, useRef, useState } from 'react';
-import { useWordSearchStore } from '../../store/wordSearchStore';
+import { useWordSearchStore, HINT_COST } from '../../store/wordSearchStore';
 import { useGameStore } from '../../store/gameStore';
 import { GRID_SIZE } from '../../wordSearch/gridGenerator';
 
@@ -15,6 +15,10 @@ export function WordSearchGame() {
     placements,
     uniqueHiddenWords,
     foundWordIndices,
+    bonusCells,
+    bonusPoints,
+    hintsUsed,
+    hintedLetters,
     isSelecting,
     selectionCells,
     answerError,
@@ -23,6 +27,7 @@ export function WordSearchGame() {
     startSelecting,
     updateSelection,
     endSelection,
+    buyHint,
     submitAnswer,
     clearError,
   } = useWordSearchStore();
@@ -31,21 +36,17 @@ export function WordSearchGame() {
 
   const [answer, setAnswer] = useState('');
   const gridRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Start a fresh puzzle on mount
   useEffect(() => {
     startPuzzle();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Clear error after short delay
   useEffect(() => {
     if (!answerError) return;
     const t = setTimeout(clearError, 600);
     return () => clearTimeout(t);
   }, [answerError, clearError]);
 
-  // Build cell state lookup: key → 'selected' | 'found' | ''
   const selectedSet = new Set(selectionCells.map(c => cellKey(c.row, c.col)));
   const foundCells = new Set<number>();
   for (const p of placements) {
@@ -53,6 +54,12 @@ export function WordSearchGame() {
       for (const c of p.cells) foundCells.add(cellKey(c.row, c.col));
     }
   }
+
+  const availablePoints = bonusPoints - hintsUsed * HINT_COST;
+  const canHint = availablePoints >= HINT_COST;
+
+  // Check if there are any unhinted letters left to reveal
+  const hasHintTargets = uniqueHiddenWords.some((_, wi) => !foundWordIndices.has(wi));
 
   function getPointerCell(e: React.PointerEvent): { row: number; col: number } | null {
     const rect = gridRef.current?.getBoundingClientRect();
@@ -99,43 +106,46 @@ export function WordSearchGame() {
 
   if (!puzzle || grid.length === 0) return null;
 
-  // Build clue display: each word is hidden (underscores) or revealed (text)
-  const clueDisplay = puzzle.clueWords.map((word, i) => {
-    const upper = word.toUpperCase().replace(/[^A-Z]/g, '');
-    if (upper.length < 3) {
-      return { word, revealed: true, key: i };
-    }
-    const idx = uniqueHiddenWords.indexOf(upper);
-    const revealed = idx === -1 || foundWordIndices.has(idx);
-    return { word, revealed, key: i };
-  });
-
   const foundCount = foundWordIndices.size;
   const totalCount = uniqueHiddenWords.length;
 
   return (
     <div className="ws-container">
       <div className="ws-game">
+
         {/* Header */}
         <div className="ws-header">
-          <button className="ws-back-btn" onClick={resetToLobby} title="Back to lobby">
-            ✕
-          </button>
+          <button className="ws-back-btn" onClick={resetToLobby} title="Back to lobby">✕</button>
           <span className="ws-title">Word Search</span>
         </div>
 
         {/* Clue */}
         <div className="ws-clue">
-          {clueDisplay.map(({ word, revealed, key }) => (
-            <span
-              key={key}
-              className={`ws-clue-word ${revealed ? 'ws-clue-word-revealed' : 'ws-clue-word-hidden'}`}
-            >
-              {revealed
-                ? word
-                : word.replace(/[A-Za-z]/g, '_')}
-            </span>
-          ))}
+          {puzzle.clueWords.map((word, i) => {
+            const upper = word.toUpperCase().replace(/[^A-Z]/g, '');
+            if (upper.length < 3) {
+              return (
+                <span key={i} className="ws-clue-word ws-clue-word-revealed">{word}</span>
+              );
+            }
+            const idx = uniqueHiddenWords.indexOf(upper);
+            if (idx === -1 || foundWordIndices.has(idx)) {
+              return (
+                <span key={i} className="ws-clue-word ws-clue-word-revealed">{word}</span>
+              );
+            }
+            // Partially or fully hidden — render letter by letter
+            const hinted = hintedLetters.get(idx) ?? new Set<number>();
+            return (
+              <span key={i} className="ws-clue-word ws-clue-word-hidden">
+                {upper.split('').map((ch, li) =>
+                  hinted.has(li)
+                    ? <span key={li} className="ws-clue-hint-letter">{ch}</span>
+                    : <span key={li}>_</span>
+                )}
+              </span>
+            );
+          })}
         </div>
 
         {/* Grid */}
@@ -150,32 +160,42 @@ export function WordSearchGame() {
             {grid.map((row, r) =>
               row.map((letter, c) => {
                 const key = cellKey(r, c);
-                const isSel = selectedSet.has(key);
+                const isSel   = selectedSet.has(key);
                 const isFound = foundCells.has(key);
+                const isBonus = !isFound && bonusCells.has(key);
                 let cls = 'ws-cell';
                 if (isFound) cls += ' ws-cell-found';
+                else if (isBonus) cls += ' ws-cell-bonus';
                 if (isSel) cls += ' ws-cell-selected';
-                return (
-                  <div key={key} className={cls}>
-                    {letter}
-                  </div>
-                );
+                return <div key={key} className={cls}>{letter}</div>;
               }),
             )}
           </div>
         </div>
 
-        {/* Progress */}
-        <div className="ws-progress">
-          {uniqueHiddenWords.map((_, i) => (
-            <div
-              key={i}
-              className={`ws-progress-dot ${foundWordIndices.has(i) ? 'ws-progress-dot-found' : ''}`}
-            />
-          ))}
-          <span className="ws-progress-label">
-            {foundCount}/{totalCount} words found
-          </span>
+        {/* Progress + bonus */}
+        <div className="ws-progress-row">
+          <div className="ws-progress">
+            {uniqueHiddenWords.map((_, i) => (
+              <div
+                key={i}
+                className={`ws-progress-dot ${foundWordIndices.has(i) ? 'ws-progress-dot-found' : ''}`}
+              />
+            ))}
+            <span className="ws-progress-label">{foundCount}/{totalCount}</span>
+          </div>
+
+          <div className="ws-bonus-area">
+            <span className="ws-bonus-score">Bonus: {availablePoints}</span>
+            <button
+              className={`ws-hint-btn ${canHint && hasHintTargets ? 'ws-hint-btn-active' : 'ws-hint-btn-disabled'}`}
+              onClick={buyHint}
+              disabled={!canHint || !hasHintTargets}
+              title={`Reveal a random letter (costs ${HINT_COST} bonus points)`}
+            >
+              Hint ({HINT_COST} pts)
+            </button>
+          </div>
         </div>
 
         {/* Answer */}
@@ -183,7 +203,6 @@ export function WordSearchGame() {
           <span className="ws-answer-label">What is the answer?</span>
           <div className="ws-answer-row">
             <input
-              ref={inputRef}
               className={`ws-answer-input ${answerError ? 'ws-answer-error' : ''}`}
               type="text"
               placeholder="Your answer…"
@@ -203,6 +222,7 @@ export function WordSearchGame() {
             </button>
           </div>
         </div>
+
       </div>
 
       {/* Win overlay */}
@@ -210,12 +230,8 @@ export function WordSearchGame() {
         <div className="ws-win">
           <div className="ws-win-title">Correct!</div>
           <div className="ws-win-answer">{puzzle.answer}</div>
-          <button className="ws-win-btn" onClick={handlePlayAgain}>
-            Play Again
-          </button>
-          <button className="ws-win-btn" onClick={resetToLobby}>
-            Back to Menu
-          </button>
+          <button className="ws-win-btn" onClick={handlePlayAgain}>Play Again</button>
+          <button className="ws-win-btn" onClick={resetToLobby}>Back to Menu</button>
         </div>
       )}
     </div>

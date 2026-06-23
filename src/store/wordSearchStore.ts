@@ -1,7 +1,21 @@
 import { create } from 'zustand';
 import { generateGrid, getUniqueHiddenWords, computeSelection, GRID_SIZE } from '../wordSearch/gridGenerator';
 import { PUZZLES } from '../wordSearch/puzzles';
+import { loadDictionary, isValidWord } from '../game/dictionary';
 import type { CellCoord, Puzzle, WordPlacement } from '../wordSearch/types';
+
+// Start loading the dictionary as soon as this module is imported
+loadDictionary();
+
+export const HINT_COST = 8;
+
+function cellKey(row: number, col: number) {
+  return row * GRID_SIZE + col;
+}
+
+function pathKey(cells: CellCoord[]) {
+  return cells.map(c => `${c.row},${c.col}`).join(':');
+}
 
 interface WordSearchState {
   puzzle: Puzzle | null;
@@ -10,23 +24,30 @@ interface WordSearchState {
   uniqueHiddenWords: string[];
   gridSize: number;
 
-  // Set of wordIndex values that have been found
   foundWordIndices: Set<number>;
+
+  // Bonus word tracking
+  bonusCells: Set<number>;
+  foundBonusPaths: Set<string>;
+  bonusPoints: number;
+
+  // Hints
+  hintsUsed: number;
+  hintedLetters: Map<number, Set<number>>; // wordIndex → revealed letter positions
 
   // Active drag selection
   isSelecting: boolean;
   selectionStart: CellCoord | null;
   selectionCells: CellCoord[];
 
-  // Flash state for wrong answer
   answerError: boolean;
   gameWon: boolean;
 
-  // Actions
   startPuzzle: (puzzle?: Puzzle) => void;
   startSelecting: (row: number, col: number) => void;
   updateSelection: (row: number, col: number) => void;
   endSelection: () => void;
+  buyHint: () => void;
   submitAnswer: (answer: string) => void;
   clearError: () => void;
 }
@@ -66,6 +87,11 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   uniqueHiddenWords: [],
   gridSize: GRID_SIZE,
   foundWordIndices: new Set(),
+  bonusCells: new Set(),
+  foundBonusPaths: new Set(),
+  bonusPoints: 0,
+  hintsUsed: 0,
+  hintedLetters: new Map(),
   isSelecting: false,
   selectionStart: null,
   selectionCells: [],
@@ -83,6 +109,11 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
       uniqueHiddenWords,
       gridSize: GRID_SIZE,
       foundWordIndices: new Set(),
+      bonusCells: new Set(),
+      foundBonusPaths: new Set(),
+      bonusPoints: 0,
+      hintsUsed: 0,
+      hintedLetters: new Map(),
       isSelecting: false,
       selectionStart: null,
       selectionCells: [],
@@ -107,21 +138,77 @@ export const useWordSearchStore = create<WordSearchState>((set, get) => ({
   },
 
   endSelection() {
-    const { selectionCells, placements, foundWordIndices } = get();
+    const {
+      selectionCells, placements, foundWordIndices,
+      grid, bonusCells, foundBonusPaths, bonusPoints,
+    } = get();
+
     if (selectionCells.length < 2) {
       set({ isSelecting: false, selectionCells: [] });
       return;
     }
 
-    const matchedIndex = findMatchingPlacement(selectionCells, placements, foundWordIndices);
-    const newFound = new Set(foundWordIndices);
-    if (matchedIndex !== null) newFound.add(matchedIndex);
+    const key = pathKey(selectionCells);
+    const newFoundWordIndices = new Set(foundWordIndices);
+    const newBonusCells = new Set(bonusCells);
+    const newFoundBonusPaths = new Set(foundBonusPaths);
+    let earned = 0;
+
+    const clueMatch = findMatchingPlacement(selectionCells, placements, foundWordIndices);
+
+    if (clueMatch !== null) {
+      newFoundWordIndices.add(clueMatch);
+      // Award bonus for the clue word if this path hasn't been counted
+      if (!newFoundBonusPaths.has(key)) {
+        earned += selectionCells.length;
+        newFoundBonusPaths.add(key);
+      }
+    } else {
+      // Check dictionary for non-clue bonus words
+      if (!newFoundBonusPaths.has(key)) {
+        const word = selectionCells.map(c => grid[c.row][c.col]).join('').toLowerCase();
+        if (isValidWord(word)) {
+          for (const c of selectionCells) newBonusCells.add(cellKey(c.row, c.col));
+          earned += selectionCells.length;
+          newFoundBonusPaths.add(key);
+        }
+      }
+    }
 
     set({
       isSelecting: false,
       selectionCells: [],
-      foundWordIndices: newFound,
+      foundWordIndices: newFoundWordIndices,
+      bonusCells: newBonusCells,
+      foundBonusPaths: newFoundBonusPaths,
+      bonusPoints: bonusPoints + earned,
     });
+  },
+
+  buyHint() {
+    const { bonusPoints, hintsUsed, hintedLetters, uniqueHiddenWords, foundWordIndices } = get();
+    const available = bonusPoints - hintsUsed * HINT_COST;
+    if (available < HINT_COST) return;
+
+    // Collect all unhinted letter positions across unfound clue words
+    const candidates: { wordIndex: number; letterIndex: number }[] = [];
+    for (let wi = 0; wi < uniqueHiddenWords.length; wi++) {
+      if (foundWordIndices.has(wi)) continue;
+      const word = uniqueHiddenWords[wi];
+      const hinted = hintedLetters.get(wi) ?? new Set<number>();
+      for (let li = 0; li < word.length; li++) {
+        if (!hinted.has(li)) candidates.push({ wordIndex: wi, letterIndex: li });
+      }
+    }
+
+    if (candidates.length === 0) return;
+
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    const newHintedLetters = new Map(hintedLetters);
+    const existing = newHintedLetters.get(pick.wordIndex) ?? new Set<number>();
+    newHintedLetters.set(pick.wordIndex, new Set([...existing, pick.letterIndex]));
+
+    set({ hintsUsed: hintsUsed + 1, hintedLetters: newHintedLetters });
   },
 
   submitAnswer(answer) {

@@ -28,7 +28,7 @@ function pillPath(x1: number, y1: number, x2: number, y2: number, r: number): st
   const ny = (dx / len) * r;
   return [
     `M ${x1 + nx},${y1 + ny}`,
-    `A ${r},${r},0,0,0,${x1 - nx},${y1 - ny}`,
+    `A ${r},${r},0,0,1,${x1 - nx},${y1 - ny}`,
     `L ${x2 - nx},${y2 - ny}`,
     `A ${r},${r},0,0,1,${x2 + nx},${y2 + ny}`,
     'Z',

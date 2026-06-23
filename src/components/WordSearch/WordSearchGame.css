@@ -89,12 +89,11 @@
 
 .ws-grid {
   --cell: min(
-    calc((100vw - 32px) / 15),
-    calc((100dvh - 280px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 15)
+    calc((100vw - 32px) / var(--grid-size, 15)),
+    calc((100dvh - 280px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / var(--grid-size, 15))
   );
   display: grid;
-  grid-template-columns: repeat(15, var(--cell));
-  grid-template-rows: repeat(15, var(--cell));
+  /* gridTemplateColumns/Rows set via inline style */
   user-select: none;
   touch-action: none;
   cursor: default;
@@ -350,7 +349,73 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.ws-option-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ws-option-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Range slider */
+.ws-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
   cursor: pointer;
+}
+
+.ws-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.ws-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  border: none;
+}
+
+/* Number input */
+.ws-number-input {
+  width: 64px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  text-align: center;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.ws-number-input:focus {
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 .ws-option-desc {

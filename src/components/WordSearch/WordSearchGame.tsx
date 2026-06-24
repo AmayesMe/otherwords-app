@@ -83,6 +83,7 @@ export function WordSearchGame() {
   // Refs for change-detection
   const gridRef                  = useRef<HTMLDivElement>(null);
   const errorTimerRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const answerResetTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevFoundIndicesRef      = useRef(new Set<number>());
   const prevHintedLettersRef     = useRef(new Map<number, Set<number>>());
   const prevAnswerSubmittedRef   = useRef(false);
@@ -171,6 +172,13 @@ export function WordSearchGame() {
       errorTimerRef.current = null;
     }, 600);
   }
+  if (answerError && !answerResetTimerRef.current) {
+    answerResetTimerRef.current = setTimeout(() => {
+      const p = useWordSearchStore.getState().puzzle;
+      setAnswer(p?.puzzleType === 'chain' ? (p.answer[0]?.toUpperCase() ?? '') : '');
+      answerResetTimerRef.current = null;
+    }, 2000);
+  }
 
   // ── Derived display values ─────────────────────────────────────────────────
   const available    = bonusPoints - hintsUsed * options.hintCost;
@@ -255,7 +263,9 @@ export function WordSearchGame() {
     resumeAudio();
     startPuzzle(undefined, localOptions);
     setStarted(true);
-    setAnswer('');
+    if (answerResetTimerRef.current) { clearTimeout(answerResetTimerRef.current); answerResetTimerRef.current = null; }
+    const newPuzzle = useWordSearchStore.getState().puzzle;
+    setAnswer(newPuzzle?.puzzleType === 'chain' ? (newPuzzle.answer[0]?.toUpperCase() ?? '') : '');
     setElapsed(0);
     setFanfareIdx(null);
     setJustFoundCells(new Set());
@@ -466,7 +476,7 @@ export function WordSearchGame() {
 
         {/* Puzzle type tag */}
         <div className="ws-puzzle-type-tag">
-          {puzzle.puzzleType === 'chain' ? 'Chain Reaction' : 'Crossword'}
+          {puzzle.puzzleType === 'chain' ? 'Chain' : 'Crossword'}
         </div>
 
         {/* Clue */}
@@ -633,7 +643,7 @@ export function WordSearchGame() {
       {showIntroModal && (
         <div className="ws-win">
           <div className="ws-intro-title">
-            {puzzle.puzzleType === 'chain' ? 'Chain Reaction' : 'Crossword'}
+            {puzzle.puzzleType === 'chain' ? 'Chain' : 'Crossword'}
           </div>
           {puzzle.puzzleType === 'chain' ? (
             <ul className="ws-intro-list">

@@ -18,6 +18,16 @@ export function resumeAudio(): void {
   if (c && c.state === 'suspended') c.resume().catch(() => {});
 }
 
+// Resume the AudioContext when the user returns to the tab/app.
+// iOS suspends AudioContext on backgrounding; this re-wakes it on visibility restore.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && _ctx && _ctx.state === 'suspended') {
+      _ctx.resume().catch(() => {});
+    }
+  });
+}
+
 function note(freq: number, offsetSec: number, durSec: number, vol = 0.3, type: OscillatorType = 'sine'): void {
   const c = getCtx();
   if (!c) return;

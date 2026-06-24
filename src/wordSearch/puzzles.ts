@@ -61,6 +61,41 @@ export const CROSSWORD_PUZZLES: Puzzle[] = [
     clueWords: words('Largest ocean on Earth covering more than one third of the globe'),
     answer: 'Pacific',
   },
+  {
+    id: 'amazon',
+    puzzleType: 'crossword',
+    clue: 'Largest river by volume in South America flowing through dense rainforest',
+    clueWords: words('Largest river by volume in South America flowing through dense rainforest'),
+    answer: 'Amazon',
+  },
+  {
+    id: 'penguin',
+    puzzleType: 'crossword',
+    clue: 'Flightless seabird of the Southern Hemisphere known for waddling on ice',
+    clueWords: words('Flightless seabird of the Southern Hemisphere known for waddling on ice'),
+    answer: 'Penguin',
+  },
+  {
+    id: 'diamond',
+    puzzleType: 'crossword',
+    clue: 'Hardest natural substance on Earth often set in engagement rings',
+    clueWords: words('Hardest natural substance on Earth often set in engagement rings'),
+    answer: 'Diamond',
+  },
+  {
+    id: 'volcano',
+    puzzleType: 'crossword',
+    clue: 'Mountain that ejects molten rock and ash when it erupts',
+    clueWords: words('Mountain that ejects molten rock and ash when it erupts'),
+    answer: 'Volcano',
+  },
+  {
+    id: 'compass',
+    puzzleType: 'crossword',
+    clue: 'Handheld navigation tool with a magnetic needle that always points north',
+    clueWords: words('Handheld navigation tool with a magnetic needle that always points north'),
+    answer: 'Compass',
+  },
 ];
 
 // Each puzzle is a two-word-phrase chain: consecutive pairs form a two-word phrase (words stay separate).
@@ -113,6 +148,46 @@ export const CHAIN_PUZZLES: Puzzle[] = [
     clueWords: ['TRADE', 'WIND', 'FARM', 'FRESH', 'AIR', 'GUITAR', 'SOLO'],
     answer: 'Flight',
     // trade wind · wind farm · farm fresh · fresh air · air guitar · guitar solo · solo flight
+  },
+  {
+    id: 'chain-stage',
+    puzzleType: 'chain',
+    clue: 'FIRE → TRUCK → STOP → SIGN → LANGUAGE → ARTS → CENTER → ?',
+    clueWords: ['FIRE', 'TRUCK', 'STOP', 'SIGN', 'LANGUAGE', 'ARTS', 'CENTER'],
+    answer: 'Stage',
+    // fire truck · truck stop · stop sign · sign language · language arts · arts center · center stage
+  },
+  {
+    id: 'chain-brand',
+    puzzleType: 'chain',
+    clue: 'PRIME → TIME → ZONE → DEFENSE → ATTORNEY → GENERAL → STORE → ?',
+    clueWords: ['PRIME', 'TIME', 'ZONE', 'DEFENSE', 'ATTORNEY', 'GENERAL', 'STORE'],
+    answer: 'Brand',
+    // prime time · time zone · zone defense · defense attorney · attorney general · general store · store brand
+  },
+  {
+    id: 'chain-plan',
+    puzzleType: 'chain',
+    clue: 'HIGH → TIDE → POOL → PARTY → LINE → DANCE → FLOOR → ?',
+    clueWords: ['HIGH', 'TIDE', 'POOL', 'PARTY', 'LINE', 'DANCE', 'FLOOR'],
+    answer: 'Plan',
+    // high tide · tide pool · pool party · party line · line dance · dance floor · floor plan
+  },
+  {
+    id: 'chain-cell',
+    puzzleType: 'chain',
+    clue: 'SMALL → TALK → BACK → PAIN → RELIEF → VALVE → STEM → ?',
+    clueWords: ['SMALL', 'TALK', 'BACK', 'PAIN', 'RELIEF', 'VALVE', 'STEM'],
+    answer: 'Cell',
+    // small talk · talk back · back pain · pain relief · relief valve · valve stem · stem cell
+  },
+  {
+    id: 'chain-office',
+    puzzleType: 'chain',
+    clue: 'BRAIN → TEASER → TRAILER → PARK → BENCH → PRESS → BOX → ?',
+    clueWords: ['BRAIN', 'TEASER', 'TRAILER', 'PARK', 'BENCH', 'PRESS', 'BOX'],
+    answer: 'Office',
+    // brain teaser · teaser trailer · trailer park · park bench · bench press · press box · box office
   },
 ];
 
